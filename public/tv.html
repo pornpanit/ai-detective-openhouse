@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Top Detectives — Live</title>
+  <style>
+    :root { --gold:#f5c542; --silver:#cfd6dd; --bronze:#d29a6b; }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 4vh 4vw; color: #f7f3e8; text-align: center;
+      font-family: "Segoe UI", system-ui, "Noto Sans Thai", sans-serif;
+      background: radial-gradient(1200px 800px at 50% -10%, #2c3a45 0%, #141c22 55%, #0b1014 100%);
+    }
+    .badge {
+      display: inline-block; font-size: 2.2vmin; letter-spacing: .35em; text-transform: uppercase;
+      color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; padding: 1vmin 3vmin;
+      margin-bottom: 2.5vmin;
+    }
+    h1 { font-size: 7.5vmin; font-weight: 800; line-height: 1.1; }
+    h1 small { display: block; font-size: .5em; font-weight: 400; color: #c9c2ad; margin-top: .6vmin; }
+    .board { width: min(1100px, 92vw); margin-top: 4.5vmin; }
+    .row {
+      display: flex; align-items: center; gap: 3vmin; padding: 2.2vmin 3.5vmin; margin: 1.4vmin 0;
+      background: rgba(255, 253, 247, .06); border: 1px solid rgba(245, 197, 66, .18);
+      border-radius: 2vmin; backdrop-filter: blur(4px);
+      animation: slidein .5s ease both;
+    }
+    .row:nth-child(1) { border-color: var(--gold); box-shadow: 0 0 4vmin rgba(245, 197, 66, .25); }
+    .row:nth-child(2) { border-color: var(--silver); }
+    .row:nth-child(3) { border-color: var(--bronze); }
+    @keyframes slidein { from { opacity: 0; transform: translateY(2vmin); } to { opacity: 1; } }
+    .rank { font-size: 4.5vmin; width: 8vmin; text-align: center; }
+    .alias { flex: 1; text-align: left; font-size: 4vmin; font-weight: 700; word-break: break-word; }
+    .pct { font-size: 5vmin; font-weight: 800; color: var(--gold); }
+    .pct small { font-size: .45em; color: #c9c2ad; }
+    .empty { margin-top: 5vmin; font-size: 3.5vmin; color: #c9c2ad; }
+    .foot { margin-top: 5vmin; font-size: 2vmin; color: #8a8471; }
+  </style>
+</head>
+<body>
+  <div class="badge">AI Detective · Openhouse</div>
+  <h1>🕵️ TOP DETECTIVES<small>นักสืบยอดเยี่ยม — อัปเดตสดทุก 10 วินาที</small></h1>
+  <div class="board" id="board"></div>
+  <div class="foot" id="updated"></div>
+  <script>
+    const MEDALS = ["🥇", "🥈", "🥉"];
+    async function load() {
+      try {
+        const r = await (await fetch("api/leaderboard.php", { cache: "no-store" })).json();
+        const b = document.getElementById("board");
+        if (r.ok && r.board.length) {
+          b.innerHTML = r.board.map((x, i) =>
+            `<div class="row"><div class="rank">${MEDALS[i] ?? (i + 1)}</div>` +
+            `<div class="alias">${x.alias}</div>` +
+            `<div class="pct">${x.pct}<small>%</small></div></div>`).join("");
+        } else {
+          b.innerHTML = `<div class="empty">No detectives yet — scan the QR to play!<br>ยังไม่มีนักสืบ — สแกน QR เพื่อเริ่มเล่น</div>`;
+        }
+        document.getElementById("updated").textContent = "live · updated " + new Date().toLocaleTimeString();
+      } catch (e) {
+        document.getElementById("updated").textContent = "connection lost — retrying…";
+      }
+    }
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

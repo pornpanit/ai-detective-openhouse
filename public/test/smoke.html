@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jsPsych smoke test</title>
+  <link rel="stylesheet" href="../lib/jspsych.css">
+  <style>
+    body { max-width: 420px; margin: 0 auto; font-family: system-ui, sans-serif; }
+    .jspsych-btn { font-size: 1.2rem; padding: 14px 32px; }
+  </style>
+</head>
+<body>
+  <script src="../lib/jspsych.js"></script>
+  <script src="../lib/plugin-html-button-response.js"></script>
+  <script src="../lib/plugin-image-button-response.js"></script>
+  <script src="../lib/plugin-preload.js"></script>
+  <script src="../lib/plugin-survey-html-form.js"></script>
+  <script src="../lib/plugin-instructions.js"></script>
+  <script>
+    const initFn = (typeof initJsPsych === "function") ? initJsPsych : jsPsychModule.initJsPsych;
+    const jsPsych = initFn();
+    const timeline = [
+      {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: "<h2>Smoke test</h2><p>Tap a button to finish.</p>",
+        choices: ["OK", "Also OK"],
+        on_finish: (data) => { document.title = "SMOKE_PASSED_rt_" + Math.round(data.rt); }
+      }
+    ];
+    jsPsych.run(timeline).then(() => {
+      const done = document.createElement("p");
+      done.textContent = "TIMELINE_COMPLETE";
+      done.id = "smoke-done";
+      document.body.appendChild(done);
+    });
+  </script>
+</body>
+</html>

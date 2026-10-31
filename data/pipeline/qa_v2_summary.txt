@@ -1,0 +1,15 @@
+QA v2 summary (full rebuild)
+---------------------------
+processed=11275 framing_pass=5578 fail=5697
+pool N per cell = 636 -> total 3816 + practice 12
+  pool gan   Female  -> 636
+  pool gan   Male    -> 636
+  pool real  Female  -> 636
+  pool real  Male    -> 636
+  pool sd15  Female  -> 636
+  pool sd15  Male    -> 636
+  gan  Female  psi=0.5  -> 318
+  gan  Female  psi=1    -> 318
+  gan  Male    psi=0.5  -> 318
+  gan  Male    psi=1    -> 318
+assets_removed=0 files_in_assets=3828

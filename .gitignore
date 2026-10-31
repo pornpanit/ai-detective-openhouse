@@ -1,0 +1,17 @@
+# Large runtime artifacts — regenerable, never commit
+tools/
+node_modules/
+data/processed/
+data/models/
+data/logs/
+data/export/
+deploy.zip
+deploy_stage/
+deploy_repo/
+
+# SECRETS — never commit (Azure credentials)
+data/pipeline/deploy_credentials.json
+data/pipeline/scm_cred.json
+data/pipeline/git_remote.txt
+data/pipeline/pubcred.json
+data/pipeline/pubprofile.xml

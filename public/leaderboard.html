@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Top Detectives</title>
+  <link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+  <div class="jspsych-display-element">
+    <div class="jspsych-content">
+      <div class="card">
+        <div class="case-tag" id="tag"></div>
+        <h2 id="title"></h2>
+        <p class="hint"><span class="live-dot"></span><span id="updated">…</span></p>
+        <div class="leaderboard"><table id="board"></table></div>
+        <button class="jspsych-btn jspsych-btn--secondary" id="refresh">↻</button>
+        <p><a class="plain" href="tv.html" target="_blank">📺 TV mode</a> ·
+           <a class="plain" href="#" onclick="history.back(); return false" id="back"></a></p>
+      </div>
+    </div>
+  </div>
+  <script src="strings.js"></script>
+  <script>
+    window.GAME_LANG = new URLSearchParams(location.search).get("lang") === "th" ? "th" : "en";
+    document.getElementById("tag").textContent = T("title");
+    document.getElementById("title").textContent = T("leaderboard_h");
+    document.getElementById("back").textContent = T("board_back");
+    async function load() {
+      try {
+        const r = await (await fetch("api/leaderboard.php", { cache: "no-store" })).json();
+        const tb = document.getElementById("board");
+        tb.innerHTML = r.board.length
+          ? "<tr><th>#</th><th>" + (GAME_LANG === "th" ? "รหัสนักสืบ" : "Detective") +
+            "</th><th>%</th></tr>" +
+            r.board.map((x, i) => `<tr><td>${i + 1}</td><td>${x.alias}</td><td>${x.percent}%</td></tr>`).join("")
+          : "<tr><td>" + (GAME_LANG === "th" ? "ยังไม่มีใครขึ้นบอร์ด" : "No detectives yet") + "</td></tr>";
+        document.getElementById("updated").textContent =
+          (GAME_LANG === "th" ? "อัปเดตล่าสุด " : "updated ") + new Date().toLocaleTimeString();
+      } catch (e) {
+        document.getElementById("updated").textContent = GAME_LANG === "th" ? "เชื่อมต่อไม่ได้…" : "offline…";
+      }
+    }
+    document.getElementById("refresh").onclick = load;
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

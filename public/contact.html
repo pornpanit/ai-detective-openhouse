@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prize draw</title>
+  <link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+  <div class="jspsych-display-element">
+    <div class="jspsych-content">
+      <div class="card">
+        <div class="case-tag" id="tag"></div>
+        <h2 id="title"></h2>
+        <p id="sub"></p>
+        <p><label id="alias-l"></label><br><input type="text" id="alias" maxlength="16"></p>
+        <p><label id="contact-l"></label><br><input type="text" id="contact" maxlength="250"></p>
+        <p class="form-error" id="err"></p>
+        <button class="jspsych-btn" id="send"></button>
+        <p><a class="plain" href="#" onclick="history.back(); return false" id="back"></a></p>
+      </div>
+    </div>
+  </div>
+  <script src="strings.js"></script>
+  <script>
+    window.GAME_LANG = new URLSearchParams(location.search).get("lang") === "th" ? "th" : "en";
+    const L = {
+      en: { title: "Prize draw", sub: "Leave your detective codename and a way to contact you. This is stored separately from the game data and only used to announce winners.",
+            alias: "Detective codename", contact: "How to reach you (phone / LINE ID / email)",
+            send: "Join the draw", ok: "You are in the draw. Good luck!", fail: "Could not save — please try again." },
+      th: { title: "สุ่มรับรางวัล", sub: "ฝากรหัสนักสืบและช่องทางติดต่อ ข้อมูลนี้เก็บแยกจากข้อมูลเกมโดยสิ้นเชิง ใช้เพื่อประกาศผลผู้ได้รางวัลเท่านั้น",
+            alias: "รหัสนักสืบ", contact: "ช่องทางติดต่อ (เบอร์โทร / LINE ID / อีเมล)",
+            send: "ร่วมสุ่มรับรางวัล", ok: "ลงทะเบียนเรียบร้อย ขอให้โชคดี!", fail: "บันทึกไม่สำเร็จ ลองอีกครั้ง" },
+    }[GAME_LANG];
+    document.getElementById("tag").textContent = T("title");
+    document.getElementById("title").textContent = L.title;
+    document.getElementById("sub").textContent = L.sub;
+    document.getElementById("alias-l").textContent = L.alias;
+    document.getElementById("contact-l").textContent = L.contact;
+    document.getElementById("send").textContent = L.send;
+    document.getElementById("back").textContent = T("board_back");
+    document.getElementById("send").onclick = async () => {
+      const r = await fetch("api/contact.php", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alias: document.getElementById("alias").value,
+                               contact: document.getElementById("contact").value }) });
+      const j = await r.json();
+      document.getElementById("err").textContent = j.ok ? L.ok : L.fail;
+    };
+  </script>
+</body>
+</html>
