@@ -29,8 +29,10 @@ checks = {
     "4.5 no per-trial feedback": "correct" not in js.split("// ---- Investigation 1")[1].split("// ---- Investigation 2")[0],
     "4.6 binary yes/no": 'T("yes"), () => T("no")' in js,
     "4.7 retry + outbox": "outbox" in js and "attempts = 3" in js,
-    "4.8 order score->alias->consent->survey->debrief":
-        (lambda s: s.index("score.php") < s.index('"alias"') < s.index('"consent"') < s.index('"survey"') < s.index("debrief_h"))(js[js.index("STAGE 2"):]),
+    "4.8 order score->consent->survey->prize->debrief":
+        (lambda s: s.index("score.php") < s.index('"consent"') < s.index('"survey"') < s.index("prize_join") < s.index("debrief_h"))(js[js.index("STAGE 2"):]),
+    "4.4b alias at signup (stage 1)": 'name="alias"' in js and js.index('name="alias"') < js.index("STAGE 2"),
+    "4.4c alias uniqueness handled": "alias_taken" in js and "check-alias.php" in js,
     "4.9 theme strings used": 'T("title")' in js and 'T("score_line")' in js,
     "4.10 quit control in rounds": "showQuit" in js and "quitFlow" in js,
 }

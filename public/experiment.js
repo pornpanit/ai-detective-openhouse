@@ -38,7 +38,7 @@
   const outboxKey = "aidtect_outbox";
 
   const S = { lang: null, session: null, plan: null, quitRequest: false, consentVal: 0,
-              birth_year: 0, gender: "", jp: null };
+              birth_year: 0, gender: "", alias: "", jp: null };
 
   /* ---------------- persistence layer ---------------- */
   async function postJSON(url, body, attempts = 3) {
@@ -73,7 +73,7 @@
 
   /* ---------------- session context (resume support) ---------------- */
   const saveCtx = () => localStorage.setItem(ctxKey, JSON.stringify({
-    sid: S.session, lang: S.lang, birth_year: S.birth_year, gender: S.gender }));
+    sid: S.session, lang: S.lang, birth_year: S.birth_year, gender: S.gender, alias: S.alias }));
   const loadCtx = () => { try { return JSON.parse(localStorage.getItem(ctxKey) || "null"); } catch { return null; } };
   const clearCtx = () => localStorage.removeItem(ctxKey);
 
@@ -187,10 +187,32 @@
         <p><label>${T("gender_q")}<br><select name="gender" required><option value="">${T("select")}</option>
           <option value="Female">${T("gender_f")}</option>
           <option value="Male">${T("gender_m")}</option>
-          <option value="Non-binary">${T("gender_nb")}</option></select></label></p></div>`,
+          <option value="Non-binary">${T("gender_nb")}</option></select></label></p>
+        <p><label>${T("alias_label")}<br>
+          <input type="text" name="alias" required maxlength="16" autocomplete="off" spellcheck="false"
+                 pattern="[\\w\\u0E00-\\u0E7F ]{3,16}" title="${T("alias_err")}"></label></p>
+        <p class="form-error" id="alias-status"></p></div>`,
+      on_load: () => {
+        const input = document.querySelector('input[name="alias"]');
+        const status = document.getElementById("alias-status");
+        let timer = null;
+        input?.addEventListener("input", () => {
+          clearTimeout(timer);
+          const v = input.value.trim();
+          if (!/^[\w\u0E00-\u0E7F ]{3,16}$/.test(v)) { status.textContent = v ? T("alias_err") : ""; return; }
+          status.textContent = T("alias_checking");
+          timer = setTimeout(async () => {
+            try {
+              const r = await (await fetch(`${API}/check-alias.php?alias=${encodeURIComponent(v)}`, { cache: "no-store" })).json();
+              status.textContent = r && r.available ? T("alias_ok") : T("alias_taken");
+            } catch { status.textContent = ""; }
+          }, 400);
+        });
+      },
       on_finish: (d) => {                       // SYNC — bootstrap happens on prepare screen
         S.birth_year = Number(d.response.yob);
         S.gender = d.response.gender || "";
+        S.alias = (d.response.alias || "").trim();
       },
     };
     jsPsych.run([langTrial, intro, demographics]).then(() => { if (!S.quitRequest) prepareScreen(); });
@@ -202,20 +224,49 @@
     render(`<div class="card"><h2>${T("loading")}</h2><p class="hint">${T("prep_sub")}</p></div>`);
     try {
       const res = await postJSON(`${API}/session.php`, {
-        lang: S.lang, birth_year: S.birth_year, gender: S.gender,
+        lang: S.lang, birth_year: S.birth_year, gender: S.gender, alias: S.alias,
         device: navigator.userAgent.slice(0, 250),
         screen: `${screen.width}x${screen.height}`,
         repeat_tag: rtTag.ensure(),
       });
-      if (!res || !res.ok) throw new Error("bootstrap failed");
-      S.session = res.session_id; S.plan = res.plan;
-      saveCtx();
-      stage2({ practice: [], r1: [], r2: [] });
+      if (res && res.ok) {
+        S.session = res.session_id; S.plan = res.plan;
+        saveCtx();
+        stage2({ practice: [], r1: [], r2: [] });
+        return;
+      }
+      if (res && res.error === "alias_taken") return renameScreen(render);
+      if (res && res.error === "already_played") return playedScreen();
+      throw new Error("bootstrap failed");
     } catch (e) {
       render(`<div class="card"><h2>${T("prep_err")}</h2><p class="hint">${T("prep_retry")}</p>
         <button class="jspsych-btn" id="prep-retry">${T("retry")}</button></div>`);
       document.getElementById("prep-retry").onclick = prepareScreen;
     }
+  }
+
+  /* ---- race-safe alias rename (server rejected the name at bootstrap) ---- */
+  function renameScreen(render) {
+    render(`<div class="card"><h2>${T("alias_h")}</h2>
+      <p>${T("alias_taken")}</p>
+      <p><label>${T("alias_label")}<br>
+      <input type="text" id="rename" maxlength="16" value="${S.alias}"></label></p>
+      <p class="form-error" id="rename-status"></p>
+      <button class="jspsych-btn" id="rename-go">${T("continue")}</button></div>`);
+    const input = document.getElementById("rename");
+    input.focus();
+    document.getElementById("rename-go").onclick = async () => {
+      const v = input.value.trim();
+      const status = document.getElementById("rename-status");
+      if (!/^[\w\u0E00-\u0E7F ]{3,16}$/.test(v)) { status.textContent = T("alias_err"); return; }
+      status.textContent = T("alias_checking");
+      try {
+        const r = await (await fetch(`${API}/check-alias.php?alias=${encodeURIComponent(v)}`, { cache: "no-store" })).json();
+        if (!r.available) { status.textContent = T("alias_taken"); return; }
+      } catch { /* let the server decide */ }
+      S.alias = v;
+      prepareScreen();
+    };
   }
 
   /* ================= STAGE 2 (game; resumable) ================= */
@@ -360,20 +411,6 @@
       },
     });
 
-    // ---- alias ----
-    timeline.push({
-      type: jsPsychSurveyHtmlForm,
-      button_label: () => T("continue"),
-      html: () => `<div class="card"><h2>${T("alias_h")}</h2>
-        <p><label>${T("alias_label")}<br><input type="text" name="alias" maxlength="16" autocomplete="off"></label></p></div>`,
-      on_load: scrollTop,
-      on_finish: async (d) => {
-        const alias = (d.response.alias || "").trim();
-        if (!/^[\w\u0E00-\u0E7F ]{3,16}$/.test(alias)) return;
-        try { await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "alias", alias }); } catch {}
-      },
-    });
-
     // ---- consent (post-game) ----
     timeline.push({
       type: jsPsychHtmlButtonResponse,
@@ -388,26 +425,76 @@
       },
     });
 
-    // ---- familiarity survey (shown regardless of consent answer; required) ----
+    // ---- familiarity survey v2: 8 questions, conditional follow-ups (Q2/Q4/Q7) ----
     const opts = (arr) => [`<option value="">${T("select")}</option>`, ...arr.map((l, i) => `<option value="${i}">${l}</option>`)].join("");
-    const q = (id, text, arr) => `<p><label>${text}<br><select name="${id}" required>${opts(arr)}</select></label></p>`;
+    const qs = (id, parent, text, arr) =>
+      `<p class="svq" data-q="${id}"${parent ? ` data-parent="${parent}" style="display:none"` : ""}>
+        <label>${text}<br><select name="${id}"${parent ? "" : " required"}>${opts(arr)}</select></label></p>`;
     timeline.push({
       type: jsPsychSurveyHtmlForm,
       button_label: () => T("continue"),
       html: () => `<div class="card"><h2>${T("survey_h")}</h2><p class="hint">${T("survey_sub")}</p>
-        ${q("f1", T("q1"), T("opt_freq"))}${q("f2", T("q2"), T("opt_platforms"))}${q("f3", T("q3"), T("opt_time"))}
-        ${q("f4", T("q4"), T("opt_ai"))}${q("f5", T("q5"), T("opt_ai"))}</div>`,
-      on_load: scrollTop,
+        ${qs("q1", "", T("q1"), T("opt_ever"))}${qs("q2", "q1", T("q2"), T("opt_freq5"))}
+        ${qs("q3", "", T("q3"), T("opt_ever"))}${qs("q4", "q3", T("q4"), T("opt_freq5"))}
+        ${qs("q5", "", T("q5"), T("opt_is"))}
+        ${qs("q6", "", T("q6"), T("opt_ever"))}${qs("q7", "q6", T("q7"), T("opt_freq5"))}
+        ${qs("q8", "", T("q8"), T("opt_fam5"))}</div>`,
+      on_load: () => {
+        scrollTop();
+        // show/hide conditional follow-ups; keep them required only when visible
+        document.querySelectorAll("select[name^=q]").forEach((sel) => {
+          sel.addEventListener("change", () => {
+            const isYes = sel.value === "0";              // option 0 = Yes/เคย/ใช่
+            document.querySelectorAll(`.svq[data-parent="${sel.name}"]`).forEach((row) => {
+              const show = isYes;
+              row.style.display = show ? "" : "none";
+              row.querySelector("select").required = show;
+              if (!show) row.querySelector("select").value = "";
+            });
+          });
+        });
+      },
       on_finish: async (d) => {
-        const f = (v) => (v === "" || v === undefined ? null : Number(v));
+        const val = (id) => (d.response[id] === "" || d.response[id] === undefined ? null : Number(d.response[id]));
+        const yn = (v) => (v === null ? null : (v === 0 ? 1 : 0));       // Yes(idx0)->1, No(idx1)->0
+        const fr = (v) => v;                                              // 0..4 as-is
+        const fam = (v) => (v === null ? null : v + 1);                   // 1..5
+        const f = {
+          f1: yn(val("q1")), f2: fr(val("q2")), f3: yn(val("q3")), f4: fr(val("q4")),
+          f5: yn(val("q5")), f6: yn(val("q6")), f7: fr(val("q7")), f8: fam(val("q8")),
+        };
         try {
-          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey",
-            f1: f(d.response.f1), f2: f(d.response.f2), f3: f(d.response.f3), f4: f(d.response.f4), f5: f(d.response.f5) });
+          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey", ...f });
           await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "finish" });
           await flushOutbox();
           clearCtx();
         } catch {}
       },
+    });
+
+    // ---- prize draw offer (everyone, consent-independent): Join / Skip ----
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div><h2>${T("prize_h")}</h2>
+        <p>${T("prize_sub")}</p><p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p></div>`,
+      choices: [() => T("prize_join"), () => T("prize_skip")],
+      on_load: scrollTop,
+      on_finish: (d) => { S.prizeJoin = d.response === 0; },
+    });
+    timeline.push({
+      timeline: [{
+        type: jsPsychSurveyHtmlForm,
+        button_label: () => T("prize_join"),
+        html: () => `<div class="card"><h2>${T("prize_h")}</h2>
+          <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p>
+          <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p></div>`,
+        on_finish: async (d) => {
+          try {
+            await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() });
+          } catch {}
+        },
+      }],
+      conditional_function: () => S.prizeJoin === true,
     });
 
     // ---- debrief ----
@@ -416,7 +503,7 @@
       stimulus: () => `<div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p><p>${T("debrief_2")}</p>
         <p>${T("debrief_3")}</p>
         <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
-           <a class="plain" href="contact.html?lang=${S.lang}">${T("prize_link")}</a></p></div>`,
+           <a class="plain" href="live.html">LIVE</a></p></div>`,
       choices: [() => T("done_btn")],
       on_load: scrollTop,
     });

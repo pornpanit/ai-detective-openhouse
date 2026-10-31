@@ -16,8 +16,22 @@ try {
          HAVING COUNT(t.id) >= 30
          ORDER BY percent DESC, MAX(t.created_at) ASC
          LIMIT 20")->fetchAll();
-    json_out(['ok' => true, 'board' => array_map(
-        fn($r) => ['alias' => $r['alias'], 'percent' => (int) $r['percent']], $rows)]);
+    $meta = $db->query(
+        "SELECT COUNT(*) AS total,
+                SUM(created_at >= CURDATE()) AS today,
+                SUM(completed = 1) AS completed
+         FROM sessions")->fetch();
+    $top = $db->query(
+        "SELECT MAX(pct) FROM (
+            SELECT ROUND(100 * SUM(correct) / COUNT(*)) AS pct
+            FROM trials WHERE round IN ('1','2') GROUP BY session_id
+         ) x")->fetchColumn();
+    json_out(['ok' => true,
+              'board' => array_map(fn($r) => ['alias' => $r['alias'], 'percent' => (int) $r['percent']], $rows),
+              'meta' => ['total' => (int) $meta['total'],
+                         'today' => (int) ($meta['today'] ?? 0),
+                         'completed' => (int) ($meta['completed'] ?? 0),
+                         'top_score' => $top === null ? 0 : (int) $top]]);
 } catch (PDOException $e) {
     json_out(['ok' => false, 'error' => 'db'], 500);
 }

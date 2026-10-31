@@ -29,17 +29,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   device         VARCHAR(250) NOT NULL DEFAULT '',
   screen         VARCHAR(40)  NOT NULL DEFAULT '',
   plan           LONGTEXT NOT NULL,             -- JSON trial plan (server-generated)
-  alias          VARCHAR(24) NULL,
-  familiarity_1  TINYINT NULL,
-  familiarity_2  TINYINT NULL,
+  alias          VARCHAR(24) NOT NULL,          -- detective codename, unique per session
+  familiarity_1  TINYINT NULL,                  -- v2 survey: yes/no items 1/0
+  familiarity_2  TINYINT NULL,                  -- freq follow-up 0-4
   familiarity_3  TINYINT NULL,
   familiarity_4  TINYINT NULL,
   familiarity_5  TINYINT NULL,
+  familiarity_6  TINYINT NULL,
+  familiarity_7  TINYINT NULL,
+  familiarity_8  TINYINT NULL,                  -- self-rated familiarity 1-5
   consent        TINYINT NULL,                  -- NULL until answered (post-game/quit)
   completed      TINYINT NOT NULL DEFAULT 0,
-  repeat_tag     VARCHAR(64) NOT NULL DEFAULT '',  -- best-effort repeat detection
+  repeat_tag     VARCHAR(64) NOT NULL DEFAULT '',  -- browser cookie id; one-play lock when TEST_MODE off
   created_at     DATETIME NOT NULL,
-  finished_at    DATETIME NULL
+  finished_at    DATETIME NULL,
+  UNIQUE KEY uq_alias (alias),
+  INDEX idx_repeat (repeat_tag)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS trials (

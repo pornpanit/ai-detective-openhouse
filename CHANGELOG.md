@@ -4,6 +4,50 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 7: signup codenames, one-play lock, survey v2, prize flow, live board, admin v4
+
+### Player-facing
+- **Detective codename at signup** (after birth year + gender): required, 3–16
+  chars with visible errors, live availability check (`api/check-alias.php`),
+  DB-enforced unique (`sessions.uq_alias`) — race-safe; a taken name at
+  bootstrap shows a rename screen. Old end-screen alias flow removed.
+- **One playthrough per browser** (cookie `repeat_tag`) outside TEST_MODE;
+  returning browsers get the already-played screen. TEST_MODE=1 app setting
+  while testing — **event day: set TEST_MODE=0** (documented in README).
+- **Investigation 2 + practice buttons → "AI / Real"** (was yes/no phrasing).
+- **Survey v2** — the researcher's 8-item list: 4 yes/no items with live
+  conditional frequency follow-ups (Q2/Q4/Q7 appear only on Yes), work/study
+  item, 1–5 self-rated familiarity (Q8). Server validates branch consistency
+  (follow-up answered without Yes → rejected). Schema: familiarity_1..8
+  (replaced 1..5) on local + Azure.
+- **Prize draw as its own screen** between survey and debrief — codename
+  read-only, contact field, Join/Skip; open to everyone regardless of consent;
+  quit path intentionally stays short. `contact.html` kept for late joiners.
+- **Favicon** 🕵️ on every page.
+
+### Live board (replaces tv.html)
+- `live.html`: fixed the "undefined%" bug (field name pct→percent), live
+  clock, pulsing LIVE badge, champion spotlight card, ranks 2–10 two-column
+  grid, stats strip (today/total/finished/best via new leaderboard `meta`
+  block), scan-to-play QR corner, F-key fullscreen, re-renders only on change.
+  Old `tv.html` removed from the server (app wipe-recreated once).
+
+### Admin v4
+- New panels: joins-by-hour, conversion funnel, where-players-quit, RT
+  distribution per round, accuracy by self-rated familiarity (Q8), accuracy
+  by AI-image exposure (Q2), cohort × type matrix, R2 response bias by cohort.
+- **CSV download buttons** (sessions/trials/dprime) via admin-gated
+  `api/export.php`.
+
+### Ops
+- DB migration applied to local + Azure (sessions/trials recreated — the 4
+  test sessions on production were wiped for the NOT NULL alias schema).
+- Deployed + verified: prod E2E covers signup, duplicate alias, survey
+  consistency, prize contact, resume state, leaderboard meta (`e2e` scripts
+  in `scripts/`).
+
+---
+
 ## 2026-10-31 — Session 6: stacking root-caused & fixed, dead quit button, cleanup
 
 - **THE stacking bug, finally root-caused**: jsPsych **7.3.4 core never clears

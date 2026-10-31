@@ -73,11 +73,15 @@ D:\KMUTT\AIproject\
 ```
 - PC: http://127.0.0.1:8090 · Phone (same Wi-Fi): http://<PC-IP>:8090 (see `ipconfig`)
 - Health check: http://127.0.0.1:8090/api/health.php → must say `{"ok":true}`
-- **Admin dashboard**: http://127.0.0.1:8090/admin.php (password from
+- **Admin dashboard**: https://face-detective.azurewebsites.net/admin.php (password from
   `config\config.php` → `admin_pw`, default `adminlocal`; set `ADMIN_PW` env
-  var in production). Charts + stats + recent sessions, auto-refresh 60s.
-- **TV leaderboard** (booth screen): http://127.0.0.1:8090/tv.html — big mode,
-  auto-refresh 30s.
+  var in production). Charts + stats + CSV downloads, auto-refresh 60s.
+- **LIVE leaderboard (booth screen)**: https://face-detective.azurewebsites.net/live.html —
+  champion card, stats, QR corner, auto-refresh 10s, press F for fullscreen.
+- **One-play lock**: active when the `TEST_MODE` app setting is `0`.
+  While testing it is `1` (replay allowed). Event day command:
+  `az webapp config appsettings set --name face-detective --resource-group rg-face-detective --settings TEST_MODE=0`
+  (re-enable for later pilots with `TEST_MODE=1`).
 - **Direct DB access** (research DB):
   `.\tools\mariadb\bin\mysql.exe -P 3307 -u research_app -presearch_dev_pw ai_detect_research`
   (prize DB: `-u prize_app -pprize_dev_pw ai_detect_prize`). Useful queries:

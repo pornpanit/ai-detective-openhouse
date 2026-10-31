@@ -18,19 +18,34 @@ The system SHALL present a landing page with a Thai/English language selection, 
 - **THEN** both language options are shown and progress is blocked until one is selected
 
 ### Requirement: Demographics collection
-The system SHALL collect birth year and gender before the first scored round, SHALL derive the generation cohort (Gen X / Millennial / Gen Z) from birth year, and SHALL NOT ask familiarity questions before or during scored rounds.
+The system SHALL collect birth year, gender, and a detective codename (3–16 characters, unique across all sessions, live availability feedback) before the game begins, SHALL derive the generation cohort (Gen X / Millennial / Gen Z) from birth year, and SHALL NOT ask familiarity questions before or during scored rounds.
 
 #### Scenario: Demographics precede scored trials
 - **WHEN** a participant completes the demographics form
-- **THEN** the generation cohort is stored on the session record before Round 1 begins
+- **THEN** the generation cohort and codename are stored on the session record before Round 1 begins
 
 #### Scenario: Birth year required
 - **WHEN** the demographics form is submitted without a birth year
-- **THEN** submission is rejected with a prompt in the selected language and the session does not proceed
+- **THEN** submission is blocked with a prompt in the selected language and the session does not proceed
+
+#### Scenario: Codename uniqueness
+- **WHEN** a codename is already used by any session
+- **THEN** the form shows it as taken live, and if a race slips through, session creation is rejected and the player chooses a new name before playing
 
 #### Scenario: No pre-game familiarity priming
 - **WHEN** the pre-game and scored-round screens are shown
 - **THEN** no digital- or AI-familiarity question appears
+
+### Requirement: One playthrough per browser
+Outside test mode the system SHALL allow only one session per browser (cookie identifier); a returning browser SHALL see the already-played screen instead of the game. Test mode (deployment setting) SHALL permit replay for development and piloting.
+
+#### Scenario: Replay blocked in production mode
+- **WHEN** a browser whose cookie already has a completed or in-progress session starts the game
+- **THEN** session creation is refused and the already-played screen with the leaderboard link is shown
+
+#### Scenario: Test mode allows replay
+- **WHEN** the deployment runs with test mode enabled
+- **THEN** the same browser may start additional sessions (each still needs a unique codename)
 
 ### Requirement: Practice trials before scored rounds
 The system SHALL present 2–3 practice trials using images that never appear in scored rounds, with no indication of correctness.
@@ -55,11 +70,11 @@ Round 1 SHALL present two face images side by side and ask "which one is AI?"; e
 - **THEN** the trial is recorded as incorrect with no correctness signal shown
 
 ### Requirement: Round 2 single-image binary judgment
-Round 2 SHALL present one face image at a time with the question "Is this AI?" and exactly two response options (yes / no).
+Round 2 SHALL present one face image at a time with the question "Is this face AI or real?" and exactly two response options labeled **AI** and **Real**.
 
 #### Scenario: Binary response only
 - **WHEN** a Round 2 trial is displayed
-- **THEN** only "yes" and "no" responses are accepted; no third option exists
+- **THEN** only "AI" and "Real" responses are accepted; no third option exists
 
 ### Requirement: Fixed round order without gating
 The system SHALL present Round 1 (2AFC) before Round 2 (binary) for every participant, with no pass threshold, unlock condition, or round skipping.
@@ -95,15 +110,26 @@ After the final score screen the system SHALL ask whether the participant's anon
 - **THEN** screens appear in the order: final score, consent question, familiarity survey, debrief
 
 ### Requirement: End-of-game familiarity survey
-After the consent question the system SHALL present a five-item digital/AI familiarity survey in the session language, shown regardless of the consent answer, with every item required before the debrief can proceed; answers SHALL be stored on the session record.
+After the consent question the system SHALL present an eight-item digital-device & AI familiarity survey in the session language, shown regardless of the consent answer: four yes/no items with conditional frequency follow-ups (shown only when the parent = yes), plus a 1–5 self-rated familiarity item. Visible items SHALL be required; hidden follow-ups stay unanswered.
 
 #### Scenario: Survey after consent
 - **WHEN** a participant answers the consent question at natural game end
-- **THEN** the familiarity survey appears next, before the debrief screen
+- **THEN** the familiarity survey appears next, before the prize offer and debrief
 
-#### Scenario: Survey answers required
-- **WHEN** a participant taps Continue with one or more survey items unanswered
-- **THEN** submission is blocked with a prompt and the session does not proceed to the debrief; answers are stored only once all five are completed (NULL only if the session is abandoned)
+#### Scenario: Conditional follow-ups
+- **WHEN** a parent yes/no question is answered "No"
+- **THEN** its frequency follow-up stays hidden and unanswered; when answered "Yes", the follow-up appears and becomes required
+
+### Requirement: Prize draw offered before the end
+After the survey the system SHALL offer the prize draw on its own screen (codename shown, contact field, Join / Skip), regardless of the consent answer, before the debrief screen.
+
+#### Scenario: Prize offer placement
+- **WHEN** the end screens run
+- **THEN** the order is: final score, consent, survey, prize offer, debrief
+
+#### Scenario: Prize open to all
+- **WHEN** a participant declined research consent
+- **THEN** the prize offer is still shown and joinable
 
 ### Requirement: In-game quit option with consent capture
 The system SHALL offer a quit control during all scored rounds; quitting SHALL ask for confirmation, then present the consent question and a short debrief, and already-saved trials SHALL remain stored with the session marked incomplete.
