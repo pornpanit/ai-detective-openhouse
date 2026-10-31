@@ -44,7 +44,7 @@ time, accuracy, and demographics — for a study on AI-image detection.
 | `scripts/` | The stimulus pipeline + every verification/E2E script (re-runnable) |
 | `openspec/` | Behavior specs of the system (the source of truth for what it does) |
 | `config/` | Database schema + local dev config |
-| `docs in root` | `design_v01…md` (research design), `CHANGELOG.md` (every change, dated), this README |
+| `docs in root` | `PROJECT_REPORT.md` (full technical report), `design_v01…md` (research design), `CHANGELOG.md` (every change, dated), this README |
 
 ## Running it
 
