@@ -16,16 +16,16 @@ $queries = [
                           familiarity_1, familiarity_2, familiarity_3, familiarity_4,
                           familiarity_5, familiarity_6, familiarity_7, familiarity_8,
                           completed, created_at, finished_at
-                   FROM sessions WHERE consent = 1 ORDER BY created_at",
+                   FROM sessions WHERE consent = 1 AND is_test = 0 ORDER BY created_at",
     'trials' => "SELECT t.session_id, t.round, t.trial_index, t.image_id, t.pair_image_id,
                         t.image_type, t.response, t.correct, t.rt_ms, t.created_at
                  FROM trials t JOIN sessions s ON s.session_id = t.session_id
-                 WHERE s.consent = 1 AND t.round IN ('1','2')
+                 WHERE s.consent = 1 AND s.is_test = 0 AND t.round IN ('1','2')
                  ORDER BY t.session_id, t.round, t.trial_index",
     'dprime' => "SELECT t.session_id, t.round, t.image_type,
                         SUM(t.correct) AS correct_n, COUNT(*) AS n
                  FROM trials t JOIN sessions s ON s.session_id = t.session_id
-                 WHERE s.consent = 1 AND t.round IN ('1','2')
+                 WHERE s.consent = 1 AND s.is_test = 0 AND t.round IN ('1','2')
                  GROUP BY t.session_id, t.round, t.image_type
                  ORDER BY t.session_id, t.round, t.image_type",
 ];

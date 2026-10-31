@@ -11,7 +11,7 @@ try {
                 ROUND(100 * SUM(t.correct) / COUNT(t.id)) AS percent
          FROM sessions s
          JOIN trials t ON t.session_id = s.session_id AND t.round IN ('1','2')
-         WHERE s.alias IS NOT NULL AND s.completed = 1
+         WHERE s.alias IS NOT NULL AND s.completed = 1 AND s.is_test = 0
          GROUP BY s.session_id, s.alias
          HAVING COUNT(t.id) >= 30
          ORDER BY percent DESC, MAX(t.created_at) ASC
@@ -20,7 +20,7 @@ try {
         "SELECT COUNT(*) AS total,
                 SUM(created_at >= CURDATE()) AS today,
                 SUM(completed = 1) AS completed
-         FROM sessions")->fetch();
+         FROM sessions WHERE is_test = 0")->fetch();
     $top = $db->query(
         "SELECT MAX(pct) FROM (
             SELECT ROUND(100 * SUM(correct) / COUNT(*)) AS pct

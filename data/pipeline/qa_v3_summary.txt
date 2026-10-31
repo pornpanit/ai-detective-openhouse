@@ -1,0 +1,16 @@
+QA v3 summary (full rebuild, per-source targets)
+----------------------------------------------
+processed=99725 framing_pass=88915 fail=10810
+fail reasons: {'unreadable': 5697, 'multi_face': 4501, 'turned': 348, 'off_center': 91, 'monochrome': 76, 'face_too_small': 73, 'rolled': 21, 'no_face': 3}
+pool total 4432 + practice 12
+  pool gan   Female  -> 600
+  pool gan   Male    -> 600
+  pool real  Female  -> 1000
+  pool real  Male    -> 1000
+  pool sd15  Female  -> 596
+  pool sd15  Male    -> 636
+  gan  Female  psi=0.5  -> 300
+  gan  Female  psi=1    -> 300
+  gan  Male    psi=0.5  -> 300
+  gan  Male    psi=1    -> 300
+assets_removed=2685 files_in_assets=4444

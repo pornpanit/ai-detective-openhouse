@@ -73,6 +73,14 @@ curl https://face-detective.azurewebsites.net/api/health.php   # must say {"ok":
 allowed for testing). Event day:
 `az webapp config appsettings set --name face-detective --resource-group rg-face-detective --settings TEST_MODE=0`
 
+**Event-day prep (admin)**: open `/admin.php` → **"🧪 Hide all existing sessions"** —
+flags every testing play as hidden: they vanish from the public board, LIVE stats,
+and research exports, but stay listed in admin for review.
+
+**Image reuse policy**: sessions prefer never-used images ("half-day unique" at
+150–220 players/day) and silently fall back to a 30-minute no-reuse window when a
+cell's fresh supply runs out — the pool can never exhaust mid-event.
+
 ## Rebuilding / extending the image pool
 
 The pipeline turns any face dataset into the balanced game pool:
@@ -83,9 +91,12 @@ sample_candidates.py → label_gender.py → process_images.py → qa_pool.py �
                                                                       six-cell rebuild)   review)
 ```
 
-Current pool: **3,816 images** (636 per source×gender cell; GAN = 50/50 ψ0.5+ψ1 mix) + 12 practice.
+Current pool: **4,432 images** (real 1,000/gender · GAN 600/gender 50/50 ψ · SD 596/636)
++ 12 practice. Full provenance: **[docs/DATASET_REPORT.md](docs/DATASET_REPORT.md)** ·
+New machine setup: **[docs/NEW_PC_SETUP.md](docs/NEW_PC_SETUP.md)**
 Sources: FFHQ (real, 70K), Stable Diffusion 1.5 (10K), StyleGAN2 (40K) from the PreSocial dataset.
-The database re-ingests `public/assets/pool_manifest.csv` automatically on the first session.
+The database re-ingests `public/assets/pool_manifest.csv` automatically on the first session
+(after a pool change, run `DELETE FROM images;` on Azure first — see CHANGELOG session 8).
 
 ## For future maintainers — the 5-minute tour
 

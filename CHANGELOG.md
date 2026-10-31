@@ -4,6 +4,55 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 8: full-dataset pipeline, pool v3, half-day unique, admin v5, test-flag
+
+### Cleanup (disk headroom)
+- Deleted 5,697 QA-failed images, `.opencode/node_modules`, root `node_modules`,
+  old logs (~580MB freed; D: now 48+GB free).
+
+### Pipeline v3 — everything processed
+- All remaining FFHQ (67.5K) + GAN (37.5K) sampled/labeled/processed in 10
+  chunks (~5 min/chunk): **99,725 processed-kept**, 88,915 pass QA v3.
+  Note: the chunk sampler's default per-source fallback caused chunks to also
+  draw other sources — net effect: the entire 120K dataset got sampled, which
+  is exactly what we wanted.
+- **QA v3** new rules (user request): monochrome drop (HSV saturation <25),
+  strong face-turn drop (eye-nose asymmetry >0.65 ≈ ±20° yaw; roll >15°).
+  Fail breakdown: multi-face 4,501 · turned 348 · off-center 91 ·
+  monochrome 76 · rolled 21.
+- **Pool v3: 4,432 + 12 practice** — real 1,000/gender, GAN 600/gender
+  (ψ 300+300), sd15 596F/636M (SD supply-capped). Contact sheet regenerated.
+  Spare archive: all 88,915 QA-passed images kept on the notebook.
+
+### Half-day unique (image reuse policy)
+- `claim_cell` now prefers never-used images per cell; silent 30-min window
+  fallback when fresh supply is out — no exhaustion risk. Spec amended
+  (stimulus-management: "Image reuse policy"); verify_plans updated to the
+  stronger zero-overlap-while-fresh assertion + no-exhaustion check.
+
+### Test-session flag (admin)
+- `sessions.is_test` column (local + Azure). Flagged sessions hidden from
+  board, LIVE meta, and research exports (api/export.php + export_research.py);
+  fully visible in admin with 🧪 badge. Admin actions: "Hide all existing
+  sessions" + per-row toggle. Event-day step replaces DB deletion.
+- E2E: scripts/e2e_flag.py (flag → board/export hide → un-flag restore) ✓
+
+### Admin v5 — full visual redesign
+- Design-token system, header with LIVE pill, sectioned layout (Overview /
+  Who joined / Detection performance / Response times & background / Sessions /
+  Exports), polished empty states, responsive. All v4 panels kept.
+- Fixed: str_pad(int) fatal under strict_types (joins-by-hour).
+
+### Ship
+- Deployed 387MB zip (app wipe-recreated). **Gotcha found & fixed**: Azure
+  `images` table still held old pool rows → plans drew 404'd images. Rule:
+  after any pool change, `DELETE FROM images` on Azure too. Both DBs now
+  clean; local + prod E2E green (4,444 ingested, 48-image sessions serve).
+- Docs: docs/DATASET_REPORT.md (full funnel numbers), docs/NEW_PC_SETUP.md,
+  requirements.txt, README links + pool numbers updated.
+
+---
+
 ## 2026-10-31 — Session 7, part 3: background preloading, 2AFC spacing, README rewrite
 
 - **Preload moved to background**: all 51 trial images start downloading

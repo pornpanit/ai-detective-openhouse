@@ -38,6 +38,17 @@ Any contact details collected for prize distribution SHALL be stored in a separa
 - **WHEN** research data is exported
 - **THEN** no prize contact information can be included, even deliberately
 
+### Requirement: Test-session hiding
+Sessions flagged as test (admin-controlled) SHALL be excluded from the leaderboard, the LIVE board statistics, and research exports, while remaining visible in the admin dashboard for review.
+
+#### Scenario: Admin hides testing plays
+- **WHEN** the researcher flags sessions as test (individually or all-at-once)
+- **THEN** they disappear from the public board and LIVE stats immediately, and from all research exports, but stay listed in the admin dashboard with a test badge
+
+#### Scenario: Un-hide restores visibility
+- **WHEN** a flagged session is un-flagged
+- **THEN** it becomes eligible for the board and exports again
+
 ### Requirement: Duplicate play handling
 The system SHALL store enough per-session information to detect and filter repeated playthroughs from the same device during analysis, without blocking anyone from playing.
 

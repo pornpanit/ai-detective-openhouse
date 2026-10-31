@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   familiarity_8  TINYINT NULL,                  -- self-rated familiarity 1-5
   consent        TINYINT NULL,                  -- NULL until answered (post-game/quit)
   completed      TINYINT NOT NULL DEFAULT 0,
+  is_test        TINYINT NOT NULL DEFAULT 0,    -- admin flag: hidden from board + exports
   repeat_tag     VARCHAR(64) NOT NULL DEFAULT '',  -- browser cookie id; one-play lock when TEST_MODE off
   created_at     DATETIME NOT NULL,
   finished_at    DATETIME NULL,

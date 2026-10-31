@@ -70,13 +70,17 @@ The game SHALL operate from a curated deployment pool (2,000–5,000 images) dra
 - **WHEN** the deployment pool is exported
 - **THEN** total pool size stays within the web host's storage budget and every cell has equal representation
 
-### Requirement: Concurrent-session non-duplication
-The system SHALL NOT assign an image to a new session if that image was used by another session started within the previous 30 minutes.
+### Requirement: Image reuse policy (unique-preferred)
+The system SHALL prefer assigning never-used images to new sessions (per cell), and SHALL fall back to the rolling-window rule (no reuse within the previous 30 minutes) only when a cell's fresh supply is exhausted. Early players therefore see all-new faces ("half-day unique") with no risk of pool exhaustion.
 
-#### Scenario: Overlapping sessions share nothing
-- **WHEN** two sessions are created within 30 minutes of each other
-- **THEN** their trial plans contain zero images in common
+#### Scenario: Fresh image preferred
+- **WHEN** a new session draws from a cell that still has never-used images
+- **THEN** only never-used images are eligible for that draw
 
-#### Scenario: Window expiry
-- **WHEN** an image's last use was more than 30 minutes ago
-- **THEN** the image is eligible again for new sessions
+#### Scenario: Silent fallback
+- **WHEN** a cell's never-used supply is exhausted
+- **THEN** the draw falls back to images unused for at least 30 minutes, and the player experience is unaffected
+
+#### Scenario: Near-simultaneous sessions still share nothing
+- **WHEN** two sessions are created within minutes of each other
+- **THEN** their plans contain zero images in common, whether drawn from fresh supply or the window

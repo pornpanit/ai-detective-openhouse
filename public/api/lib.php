@@ -76,9 +76,11 @@ function ensure_images_ingested(PDO $db): void {
 }
 
 /**
- * Claim up to $count pool images from a cell, excluding images used within the
- * rolling window. Race-safe: an image is owned only if our guarded UPDATE
- * succeeds. Returns [['image_id'=>..,'file'=>..,'psi'=>..], ...].
+ * Claim up to $count pool images from a cell. Reuse policy (half-day unique):
+ * prefer NEVER-USED images (last_used_at IS NULL) first — early players see
+ * all-new faces; when a cell's fresh supply runs out, this silently falls
+ * back to the rolling window rule (unused for 30+ minutes). Race-safe: an
+ * image is owned only if the guarded UPDATE succeeds.
  */
 function claim_cell(PDO $db, string $source, string $gender, int $count): array {
     $win = (int) cfg()['window_minutes'];
@@ -86,7 +88,7 @@ function claim_cell(PDO $db, string $source, string $gender, int $count): array 
         "SELECT image_id, file, psi FROM images
          WHERE source = ? AND gender = ? AND role = 'pool'
            AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL $win MINUTE)
-         ORDER BY RAND() LIMIT 8");
+         ORDER BY (last_used_at IS NULL) DESC, RAND() LIMIT 8");
     $own = $db->prepare(
         "UPDATE images SET last_used_at = NOW()
          WHERE image_id = ? AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL $win MINUTE)");

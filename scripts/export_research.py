@@ -22,7 +22,7 @@ SELECT s.session_id, s.lang, s.birth_year, s.cohort, s.gender, s.device, s.scree
        s.alias, s.familiarity_1, s.familiarity_2, s.familiarity_3, s.familiarity_4,
        s.familiarity_5, s.completed, s.created_at, s.finished_at
 FROM sessions s
-WHERE s.consent = 1
+WHERE s.consent = 1 AND s.is_test = 0
 ORDER BY s.created_at"""
 
 TRIALS_SQL = """
@@ -30,7 +30,7 @@ SELECT t.session_id, t.round, t.trial_index, t.image_id, t.pair_image_id,
        t.image_type, t.response, t.correct, t.rt_ms, t.created_at
 FROM trials t
 JOIN sessions s ON s.session_id = t.session_id
-WHERE s.consent = 1 AND t.round IN ('1','2')
+WHERE s.consent = 1 AND s.is_test = 0 AND t.round IN ('1','2')
 ORDER BY t.session_id, t.round, t.trial_index"""
 
 DPRIME_SQL = """
@@ -38,7 +38,7 @@ SELECT t.session_id, t.round, t.image_type,
        SUM(t.correct) AS correct_n, COUNT(*) AS n
 FROM trials t
 JOIN sessions s ON s.session_id = t.session_id
-WHERE s.consent = 1 AND t.round IN ('1','2')
+WHERE s.consent = 1 AND s.is_test = 0 AND t.round IN ('1','2')
 GROUP BY t.session_id, t.round, t.image_type
 ORDER BY t.session_id, t.round, t.image_type"""
 

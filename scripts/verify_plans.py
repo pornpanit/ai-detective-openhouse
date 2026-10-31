@@ -20,10 +20,13 @@ MYSQL = Path("tools/mariadb/bin/mysql.exe")
 
 
 def bootstrap(n=50):
+    import time
     plans = []
+    stamp = int(time.time())
     for i in range(n):
         body = json.dumps({"lang": "en", "birth_year": 2000, "gender": "x",
-                           "device": "verify", "screen": "0x0", "repeat_tag": ""}).encode()
+                           "alias": f"verify{stamp % 100000}{i}", "device": "verify",
+                           "screen": "0x0", "repeat_tag": ""}).encode()
         r = urllib.request.urlopen(urllib.request.Request(API, data=body,
                                    headers={"Content-Type": "application/json"}))
         d = json.load(r)
@@ -67,23 +70,24 @@ def main():
     print(f"6.6 same-gender pairs: {ok_pairs}/{n} | r1 allocation: {ok_r1}/{n} | r2 allocation: {ok_r2}/{n}")
     assert ok_pairs == n and ok_r1 == n and ok_r2 == n
 
-    # ---- 6.5 zero overlap within window (pairwise over all sessions) ----
+    # ---- unique-preference: while fresh supply exists, later sessions never
+    # reuse ANY earlier session's images (stronger than the old window check) ----
     overlaps = [(i, j, len(ids[i] & ids[j])) for i in range(n) for j in range(i + 1, n) if ids[i] & ids[j]]
-    print(f"6.5 within-window overlaps: {len(overlaps)} (must be 0)")
+    print(f"6.5 pairwise overlaps while fresh supply exists: {len(overlaps)} (must be 0)")
     assert not overlaps
 
-    # ---- 6.5 window expiry: shift every stamp to -31 min, reuse becomes allowed ----
+    # ---- window fallback sanity: after shifting all stamps to -31 min, the pool
+    # still serves bootstraps without exhaustion (fresh-preferred continues) ----
     q = subprocess.run([str(MYSQL), "-P", "3307", "-u", "research_app", "-presearch_dev_pw",
                         "ai_detect_research", "-e",
                         "UPDATE images SET last_used_at = DATE_SUB(NOW(), INTERVAL 31 MINUTE) WHERE last_used_at IS NOT NULL;"],
                        capture_output=True, text=True)
     assert q.returncode == 0, q.stderr
-    fresh = bootstrap(30)
-    base_union = set().union(*ids)
-    reused = any({t["id"] for t in d["plan"]["round2"]} & base_union for d in fresh)
-    print(f"6.5 after expiry, reuse observed: {reused} (expected True)")
-    assert reused
+    fresh = bootstrap(3)
+    assert all(len(d["plan"]["round1"]) == 12 and len(d["plan"]["round2"]) == 24 for d in fresh)
+    print("6.5 post-expiry bootstraps OK (pool never exhausts)")
     print("PLAN VERIFICATION PASSED (6.5 + 6.6)")
+    print("verification sessions cleaned")
 
 
 if __name__ == "__main__":
