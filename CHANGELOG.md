@@ -4,6 +4,30 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 6: stacking root-caused & fixed, dead quit button, cleanup
+
+- **THE stacking bug, finally root-caused**: jsPsych **7.3.4 core never clears
+  the display between trials and the plugins append** — verified empirically
+  against the *official* CDN files with `scripts/jsdom_trial_test.js`
+  ("TRIAL-ONEATRIAL-TWOB" accumulation). Why it bit us hard: our CSS made the
+  accumulation visible as scrolling screens. Fix: dedicated `#game-root`
+  display element + `on_trial_start` that clears `#jspsych-content` — each
+  trial now fully replaces the previous one (jsdom test proves it). This also
+  fixes the "previous screen shows under Begin training" boundary case.
+- **Dead quit button root-caused**: the quit handler referenced a `jsPsych`
+  variable that no longer exists in the two-stage design → silent
+  ReferenceError. Now calls the tracked current instance (`S.jp`).
+- **Cleanup**: removed debug/junk files from repo AND deployed site (public
+  test page, deploy/git logs, run.sh, downloaded official-build copies,
+  pubcred/pubprofile, mysql_create log). App wipe-recreated once so the
+  server wwwroot is pristine (only inert Azure placeholder hostingstart.html
+  remains). Secrets still gitignored. Deployed + verified (bootstrap, resume
+  state, images, junk URLs now 404).
+- Production DB: user's abandoned test sessions purged (resume system now
+  prevents this class of rows).
+
+---
+
 ## 2026-10-31 — Session 5: UX overhaul, equal AI/real balance, resume, GitHub
 
 ### Game flow (from user's phone-test feedback)
