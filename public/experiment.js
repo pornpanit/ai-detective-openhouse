@@ -10,12 +10,35 @@
   "use strict";
   const API = "api";
   const ASSETS = "assets";
-  const initFn = (typeof initJsPsych === "function") ? initJsPsych : jsPsychModule.initJsPsych;
+  const initFnBase = (typeof initJsPsych === "function") ? initJsPsych : jsPsychModule.initJsPsych;
+
+  /* Dedicated game root: every jsPsych run and every custom screen renders
+     into this one container. NOTE: jsPsych 7.3.4 plugins append without
+     removing previous trials (verified by scripts/jsdom_trial_test.js), so we
+     clear the content element on every on_trial_start. */
+  const gameRoot = (() => {
+    let el = document.getElementById("game-root");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "game-root";
+      document.body.appendChild(el);
+    }
+    return el;
+  })();
+  const initFn = (opts = {}) => initFnBase({
+    display_element: gameRoot,
+    on_trial_start: () => {
+      const c = gameRoot.querySelector("#jspsych-content");
+      if (c) c.innerHTML = "";
+      scrollTop();
+    },
+  });
+
   const ctxKey = "aidtect_ctx";
   const outboxKey = "aidtect_outbox";
 
   const S = { lang: null, session: null, plan: null, quitRequest: false, consentVal: 0,
-              birth_year: 0, gender: "" };
+              birth_year: 0, gender: "", jp: null };
 
   /* ---------------- persistence layer ---------------- */
   async function postJSON(url, body, attempts = 3) {
@@ -73,15 +96,14 @@
     if (document.getElementById("quit-btn")) return;
     const b = document.createElement("button");
     b.id = "quit-btn"; b.textContent = T("quit_btn");
-    b.onclick = () => { S.quitRequest = true; jsPsych.finishTrial({ quit_interrupt: true }); };
+    b.onclick = () => { S.quitRequest = true; S.jp?.finishTrial({ quit_interrupt: true }); };
     document.body.appendChild(b);
   };
   const hideQuit = () => { document.getElementById("quit-btn")?.remove(); trialMode(false); };
 
   async function quitFlow() {           // quit path: consent + short debrief only
     hideQuit(); await flushOutbox(); clearCtx();
-    const root = document.querySelector(".jspsych-content-wrapper");
-    root.innerHTML = `<div class="jspsych-content"><div class="card"><div class="case-tag">${T("title")}</div>
+    gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><div class="case-tag">${T("title")}</div>
       <h2>${T("quit_debrief")}</h2><p>${T("consent_q")}</p><p class="hint">${T("consent_what")}</p>
       <div><button class="jspsych-btn" id="c-yes">${T("consent_yes")}</button>
       <button class="jspsych-btn jspsych-btn--secondary" id="c-no">${T("consent_no")}</button></div></div></div>`;
@@ -90,7 +112,7 @@
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: v });
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
       } catch { /* best effort; trials already saved */ }
-      root.innerHTML = `<div class="jspsych-content"><div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p>
+      gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p>
         <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
            <a class="plain" href="contact.html?lang=${S.lang}">${T("prize_link")}</a></p></div></div>`;
     };
@@ -116,10 +138,9 @@
   }
 
   function fullScreenCard(inner) {
-    const root = document.querySelector(".jspsych-content-wrapper");
-    root.innerHTML = `<div class="jspsych-content">${inner}</div>`;
+    gameRoot.innerHTML = `<div class="jspsych-content">${inner}</div>`;
     scrollTop();
-    return root;
+    return gameRoot;
   }
 
   function playedScreen() {
@@ -143,6 +164,7 @@
   /* ================= STAGE 1 (fresh player) ================= */
   function stage1() {
     const jsPsych = initFn();
+    S.jp = jsPsych;
     const langTrial = {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<h1>🕵️</h1><h2>${STRINGS.en.lang_pick}</h2><h2>${STRINGS.th.lang_pick}</h2>`,
@@ -176,8 +198,7 @@
 
   /* ---- prepare screen: visible bootstrap with retry ---- */
   async function prepareScreen() {
-    const root = document.querySelector(".jspsych-content-wrapper");
-    const render = (html) => { root.innerHTML = `<div class="jspsych-content">${html}</div>`; scrollTop(); };
+    const render = (html) => { gameRoot.innerHTML = `<div class="jspsych-content">${html}</div>`; scrollTop(); };
     render(`<div class="card"><h2>${T("loading")}</h2><p class="hint">${T("prep_sub")}</p></div>`);
     try {
       const res = await postJSON(`${API}/session.php`, {
@@ -205,6 +226,7 @@
       r2: new Set(saved.r2 || []),
     };
     const jsPsych = initFn();
+    S.jp = jsPsych;
     const timeline = [];
     const plan = S.plan;
     const quitConfirmNode = () => ({
