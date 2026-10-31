@@ -1,8 +1,34 @@
 # AI Detective — Openhouse Experiment Website
 
-Mobile web game (jsPsych + PHP + MariaDB) measuring how well people detect
+Mobile web game (jsPsych + PHP + MariaDB/MySQL) measuring how well people detect
 AI-generated faces, across generations. Detective theme; anonymous research
 data; prize-draw contact stored separately.
+
+**Live**: https://face-detective.azurewebsites.net ·
+**Repo**: https://github.com/pornpanit/ai-detective-openhouse (private)
+
+## For future maintainers — the 5-minute tour
+
+| Want to… | Do this |
+|---|---|
+| Run locally | Two commands in [Running locally](#running-local-2-windows); everything is portable in `tools/` |
+| Change game text | `public/strings.js` (TH + EN keys, keep them in sync — `python scripts\check_frontend.py` verifies) |
+| Change trials/rules | `public/experiment.js` (flow) + `public/api/lib.php` (plan generation) — specs in `openspec/changes/add-detection-experiment/specs/` are the source of truth |
+| Redeploy | `python scripts\make_deploy_zip.py public deploy.zip` then `az webapp deploy …` (exact commands in [Production](#production-azure--live)) |
+| Rebuild / extend the image pool | Pipeline table below — start from `sample_candidates.py`; QA rules in `scripts/qa_pool.py` |
+| Get research data | `python scripts\export_research.py data\export` (consented only) or the admin dashboard |
+| Understand why something is the way it is | `CHANGELOG.md` (every change, dated) + `design_v01_2026-10-29.md` (research design) |
+
+Architecture in one paragraph: the phone runs a jsPsych app (`public/`) that
+asks a PHP API (`public/api/`) for a server-generated trial plan (six-cell
+balanced, 30-min no-reuse window), saves every trial immediately (idempotent,
+retry + outbox), and finishes with consent → survey → debrief. Two databases:
+research (anonymous) and prize contacts (separate credentials, never joined).
+Reload-safe: `api/state.php` + browser context let players resume.
+
+**Secrets**: `data/pipeline/deploy_credentials.json`, `scm_cred.json`,
+`git_remote.txt` are gitignored — Azure credentials live there and in App
+Service app settings. Never commit them.
 
 ## Folder map
 

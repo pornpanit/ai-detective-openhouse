@@ -4,6 +4,49 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 5: UX overhaul, equal AI/real balance, resume, GitHub
+
+### Game flow (from user's phone-test feedback)
+- **Full Thai rewrite** of every string (native-level); participant gender now
+  exactly 3 options (Female / Male / Non-binary).
+- **One trial per screen**: `body.trial-mode` locks the viewport (100dvh
+  flex-centered) during trials — no scrolling, image always in the same
+  position; responsive breakpoints (768/1200px) for tablet + desktop on all
+  pages.
+- **Quit redesigned** as a jsPsych-native confirm trial — the interrupted trial
+  is discarded (never saved, no RT contamination); fixed dead popup buttons.
+- **Reload/resume system**: browser context + new `api/state.php` → "Welcome
+  back, continue?" resumes at the first unanswered trial; completed players
+  see "already played" + play-again. Abandoned test sessions purged from
+  local + production (per user approval).
+- **Live leaderboards**: `leaderboard.html` + `tv.html` now poll every 10s
+  with an "updated" timestamp.
+
+### Research design change: equal real/AI counts
+- **Round 2 → 24 trials** (12 AI = 6 GAN + 6 diffusion, 12 real): session
+  totals 24 AI + 24 real, exactly equal, six-cell parity intact.
+  Specs (`stimulus-management`, `experiment-flow` 7–8 min) + design doc updated.
+- **Capacity bug found & fixed by verify_plans**: R2=24 doubles real-image
+  draw (12/session) → the 334/cell pool 503-exhausted at ~27 sessions/30-min
+  window. Pool enlarged to **636/cell (3,816 + 12 practice)** → 53
+  sessions/window. 334MB python-zip deployed fine (backslash, not size, was
+  the original zip-deploy killer).
+
+### Admin dashboard v3
+- Joins (cohort/gender/language) now **donut charts** (pure CSS); session
+  length + accuracy stay bars.
+- Round & type section rebuilt with correct semantics: R1 = "% of AI faces
+  spotted" (no real row by design); R2 = hit rate (gan/diff) + correct
+  rejection rate (real) — with an explainer box.
+
+### Version control
+- `.gitignore` (tools, node_modules, big data dirs, **secrets**); initial
+  commit (3,916 files incl. face images per user choice); **private repo
+  pushed: github.com/pornpanit/ai-detective-openhouse**; README gained the
+  future-maintainer guide.
+
+---
+
 ## 2026-10-31 — Session 4: PRODUCTION DEPLOYED (Azure)
 
 **The game is live at https://face-detective.azurewebsites.net** (Azure for
