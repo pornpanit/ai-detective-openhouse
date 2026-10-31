@@ -1,138 +1,107 @@
-# AI Detective — Openhouse Experiment Website
+# 🕵️ AI Detective
 
-Mobile web game (jsPsych + PHP + MariaDB/MySQL) measuring how well people detect
-AI-generated faces, across generations. Detective theme; anonymous research
-data; prize-draw contact stored separately.
+**A web game that measures how well humans can tell AI-generated faces from real ones — across generations.**
 
-**Live**: https://face-detective.azurewebsites.net ·
-**Repo**: https://github.com/pornpanit/ai-detective-openhouse (private)
+Built for a university openhouse: visitors scan a QR code, play a 7–8 minute detective
+game on their own phones, and every answer quietly becomes research data — response
+time, accuracy, and demographics — for a study on AI-image detection.
+
+🚀 **Play it**: https://face-detective.azurewebsites.net
+📺 **Live leaderboard** (for the booth screen): https://face-detective.azurewebsites.net/live.html
+🔒 Private research repo · Thai/English in-game · anonymous data · zero cost hosting (Azure free tiers)
+
+---
+
+## What happens when you play
+
+1. Scan the QR code → pick your language (Thai/English)
+2. Sign up: birth year, gender, and a unique **detective codename** (one play per person)
+3. A 2-trial training case (no feedback, ever)
+4. **Investigation 1** — 12 rounds of two faces: *tap the AI one*
+5. **Investigation 2** — 24 single faces: *AI or Real?* (no time limit)
+6. Your case report: "database cleaned X%" + the Top Detectives leaderboard
+7. Consent question, an 8-question background survey, optional prize draw
+8. Done — you can watch the live board update at the booth
+
+## What the researcher gets
+
+- **Per trial**: response, correctness (computed server-side, tamper-safe), response time
+- **Per player**: generation cohort (Gen X / Millennial / Gen Z), device metadata,
+  8-item AI-familiarity survey, consent status
+- **Balanced stimuli by design**: every session sees 24 AI faces (12 StyleGAN2 +
+  12 Stable Diffusion) and 24 real FFHQ faces, gender-balanced, same-gender pairs in
+  Investigation 1, no image reuse between players within 30 minutes
+- **Analysis-ready exports** (consented players only, quitters included as covariate):
+  CSVs for sessions, trials, and d′ inputs — downloadable from the admin dashboard
+- **Privacy by architecture**: research data is anonymous; prize contacts live in a
+  separate database with separate credentials and can never be joined to it
+
+## How the project is organized
+
+| Folder | What it is |
+|---|---|
+| `public/` | The website — game (`experiment.js`, `strings.js`), API (`api/`, PHP), admin dashboard, LIVE board, face images |
+| `scripts/` | The stimulus pipeline + every verification/E2E script (re-runnable) |
+| `openspec/` | Behavior specs of the system (the source of truth for what it does) |
+| `config/` | Database schema + local dev config |
+| `docs in root` | `design_v01…md` (research design), `CHANGELOG.md` (every change, dated), this README |
+
+## Running it
+
+**Local** (portable stack included in `tools/`, no installs):
+
+```powershell
+# Window 1 — database
+.\tools\mariadb\bin\mysqld.exe --datadir=D:\KMUTT\AIproject\tools\mariadb-data --port=3307 --bind-address=127.0.0.1 --console
+# Window 2 — website
+.\tools\php\php.exe -S 0.0.0.0:8090 -t public
+```
+→ http://127.0.0.1:8090 · Admin: `/admin.php` · Health: `/api/health.php`
+
+**Production**: live on Azure App Service F1 + MySQL Flexible (free tiers), region
+Southeast Asia. Credentials (local only, gitignored): `data/pipeline/deploy_credentials.json`.
+
+**Redeploy after changing anything in `public/`**:
+
+```powershell
+python scripts\make_deploy_zip.py public deploy.zip     # python zip = correct entry separators
+az webapp deploy --name face-detective --resource-group rg-face-detective --src-path deploy.zip --type zip
+curl https://face-detective.azurewebsites.net/api/health.php   # must say {"ok":true}
+```
+
+**One-play lock**: active when app setting `TEST_MODE=0` (currently `1` = replay
+allowed for testing). Event day:
+`az webapp config appsettings set --name face-detective --resource-group rg-face-detective --settings TEST_MODE=0`
+
+## Rebuilding / extending the image pool
+
+The pipeline turns any face dataset into the balanced game pool:
+
+```
+sample_candidates.py → label_gender.py → process_images.py → qa_pool.py → contact_sheet.py
+     (pick N/source)      (auto gender)     (768px, 80–150KB)   (one centered face,  (eyeball
+                                                                      six-cell rebuild)   review)
+```
+
+Current pool: **3,816 images** (636 per source×gender cell; GAN = 50/50 ψ0.5+ψ1 mix) + 12 practice.
+Sources: FFHQ (real, 70K), Stable Diffusion 1.5 (10K), StyleGAN2 (40K) from the PreSocial dataset.
+The database re-ingests `public/assets/pool_manifest.csv` automatically on the first session.
 
 ## For future maintainers — the 5-minute tour
 
 | Want to… | Do this |
 |---|---|
-| Run locally | Two commands in [Running locally](#running-local-2-windows); everything is portable in `tools/` |
-| Change game text | `public/strings.js` (TH + EN keys, keep them in sync — `python scripts\check_frontend.py` verifies) |
-| Change trials/rules | `public/experiment.js` (flow) + `public/api/lib.php` (plan generation) — specs in `openspec/changes/add-detection-experiment/specs/` are the source of truth |
-| Redeploy | `python scripts\make_deploy_zip.py public deploy.zip` then `az webapp deploy …` (exact commands in [Production](#production-azure--live)) |
-| Rebuild / extend the image pool | Pipeline table below — start from `sample_candidates.py`; QA rules in `scripts/qa_pool.py` |
-| Get research data | `python scripts\export_research.py data\export` (consented only) or the admin dashboard |
-| Understand why something is the way it is | `CHANGELOG.md` (every change, dated) + `design_v01_2026-10-29.md` (research design) |
+| Change game text | `public/strings.js` — TH + EN keys, keep in sync (`python scripts\check_frontend.py` verifies) |
+| Change trials/rules | `public/experiment.js` (flow) + `public/api/lib.php` (plan generation); specs in `openspec/…/specs/` are the source of truth |
+| Add new stimulus data | Pipeline above — see `scripts/` docstrings; QA rules live in `qa_pool.py` |
+| Get research data | Admin dashboard → CSV buttons, or `python scripts\export_research.py data\export` |
+| Understand why something is the way it is | `CHANGELOG.md` (every decision + incident, dated) + `design_v01_2026-10-29.md` |
 
-Architecture in one paragraph: the phone runs a jsPsych app (`public/`) that
-asks a PHP API (`public/api/`) for a server-generated trial plan (six-cell
-balanced, 30-min no-reuse window), saves every trial immediately (idempotent,
-retry + outbox), and finishes with consent → survey → debrief. Two databases:
-research (anonymous) and prize contacts (separate credentials, never joined).
-Reload-safe: `api/state.php` + browser context let players resume.
+Architecture in one paragraph: the phone runs a jsPsych app that asks a PHP API for a
+server-generated trial plan (six-cell balanced, 30-min no-reuse window), saves every
+trial immediately (idempotent, retry + offline outbox), and finishes with consent →
+survey → prize → debrief. Two databases: research (anonymous) and prize contacts
+(separate credentials, never joined). Reload-safe: players resume where they stopped.
 
-**Secrets**: `data/pipeline/deploy_credentials.json`, `scm_cred.json`,
-`git_remote.txt` are gitignored — Azure credentials live there and in App
-Service app settings. Never commit them.
-
-## Folder map
-
-```
-D:\KMUTT\AIproject\
-├── public\                  ← THE WEBSITE (everything the server serves)
-│   ├── index.html           entry page (loads everything below)
-│   ├── experiment.js        game flow (2 stages + quit + end screens)
-│   ├── strings.js           TH/EN text incl. detective theme
-│   ├── css\game.css         styling
-│   ├── lib\                 jsPsych 7.3.4 (browser builds) + plugins
-│   ├── api\                 PHP endpoints (session, trial, finalize,
-│   │                          score, leaderboard, contact, health, lib.php)
-│   ├── assets\faces\        ★ the image pool the game serves (3,828 files)
-│   ├── assets\pool_manifest.csv   pool list the API ingests into the DB
-│   ├── leaderboard.html     Top Detectives board
-│   ├── contact.html         prize-draw contact (separate DB)
-│   └── test\smoke.html      jsPsych sanity page
-├── config\                  config.php (DB credentials) + schema.sql
-├── scripts\                 all pipeline & verification code (see below)
-├── data\
-│   ├── pipeline\            manifests + labeling/processing/QA reports
-│   ├── processed\           all processed 768x768 images (source of the pool)
-│   ├── models\              YuNet + gender classifier files
-│   ├── logs\                every pipeline run log + qa_v2_report.csv
-│   └── export\              research export CSVs + contact_sheet.html
-├── tools\                   portable php\ + mariadb\ (no system install)
-├── openspec\                spec-driven change tracking (add-detection-experiment)
-├── design_v01_2026-10-29.md research design document
-├── README.md                this file
-└── CHANGELOG.md             what changed, when, why — READ THIS
-```
-
-## Running locally (2 windows)
-
-```powershell
-# Window 1 — database (keep open)
-.\tools\mariadb\bin\mysqld.exe --datadir=D:\KMUTT\AIproject\tools\mariadb-data --port=3307 --bind-address=127.0.0.1 --console
-
-# Window 2 — website (keep open)
-.\tools\php\php.exe -S 0.0.0.0:8090 -t public
-```
-- PC: http://127.0.0.1:8090 · Phone (same Wi-Fi): http://<PC-IP>:8090 (see `ipconfig`)
-- Health check: http://127.0.0.1:8090/api/health.php → must say `{"ok":true}`
-- **Admin dashboard**: https://face-detective.azurewebsites.net/admin.php (password from
-  `config\config.php` → `admin_pw`, default `adminlocal`; set `ADMIN_PW` env
-  var in production). Charts + stats + CSV downloads, auto-refresh 60s.
-- **LIVE leaderboard (booth screen)**: https://face-detective.azurewebsites.net/live.html —
-  champion card, stats, QR corner, auto-refresh 10s, press F for fullscreen.
-- **One-play lock**: active when the `TEST_MODE` app setting is `0`.
-  While testing it is `1` (replay allowed). Event day command:
-  `az webapp config appsettings set --name face-detective --resource-group rg-face-detective --settings TEST_MODE=0`
-  (re-enable for later pilots with `TEST_MODE=1`).
-- **Direct DB access** (research DB):
-  `.\tools\mariadb\bin\mysql.exe -P 3307 -u research_app -presearch_dev_pw ai_detect_research`
-  (prize DB: `-u prize_app -pprize_dev_pw ai_detect_prize`). Useful queries:
-  `SELECT COUNT(*) FROM sessions;` · `SELECT * FROM trials ORDER BY id DESC LIMIT 10;`
-
-## The stimulus pipeline (re-runnable for future datasets)
-
-Order (each step reads the previous output):
-
-| Step | Command | Output |
-|---|---|---|
-| 1. Sample candidates | `python scripts\sample_candidates.py --out data\pipeline\<name>.csv [--counts "src=N,..."] [--exclude <old.csv>] [--sources my.json]` | candidate path manifest |
-| 2. Gender labeling | `python scripts\label_gender.py --in <candidates.csv> --out <labeled.csv> --workers 6` | labels + confidence |
-| 3. Process to 768px/80–150KB + QA | `python scripts\process_images.py --in <labeled.csv> --report data\processed_report_<name>.csv --workers 6` | `data\processed\*.jpg` |
-| 4. Pool rebuild (framing QA + 6-cell balance + assets sync) | `python scripts\qa_pool.py` | pool manifest + `public\assets\faces\` |
-| 5. Contact sheet for eyeball review | `python scripts\contact_sheet.py` | `data\export\contact_sheet.html` |
-
-For a NEW dataset: write `my_sources.json` (`[{"source":"mydata","psi":"","path":"D:\\images"}]`),
-run steps 1–3 with it, then step 4 rebuilds from ALL `processed_report*.csv` files.
-The DB re-ingests the manifest automatically on the next session start
-(or force it: `DELETE FROM images;` in MySQL first).
-
-## Production (Azure) — LIVE
-
-- **URL**: https://face-detective.azurewebsites.net (admin: `/admin.php`)
-- Resources: `rg-face-detective` / App Service F1 / MySQL Flexible B1ms (free
-  grant, Southeast Asia) — Azure for Students subscription
-- Credentials (local only, never share): `data\pipeline\deploy_credentials.json`
-  (DB users + admin pw) · `data\pipeline\scm_cred.json` (Kudu)
-- **Redeploy after changing anything in `public\`**:
-  ```powershell
-  # 1. stage site (excluding nothing) and zip WITH PYTHON (forward slashes!)
-  Copy-Item public\* <stage> -Recurse -Force   # or edit public/ directly in a stage copy
-  python scripts\make_deploy_zip.py <stage> deploy.zip
-  # 2. deploy + verify
-  az webapp deploy --name face-detective --resource-group rg-face-detective --src-path deploy.zip --type zip
-  curl https://face-detective.azurewebsites.net/api/health.php
-  ```
-- QR code for printing: `data\export\qr_production.png`
-- MySQL free grant ends after 12 months — **delete the server after the event**
-  unless you keep using it (student credit covers it regardless).
-
-## Verification scripts
-
-- `python scripts\check_frontend.py` — static checks (strings parity, assets, flow rules)
-- `python scripts\verify_plans.py 20` — bootstrap N sessions; 6-cell balance, same-gender pairs, 30-min no-overlap (needs servers running)
-- `python scripts\export_research.py data\export` — consented research data → CSVs
-
-## Current state (see CHANGELOG for history)
-
-- **PRODUCTION LIVE**: https://face-detective.azurewebsites.net
-- Pool: 2,004 images, 334 per cell (real/GAN/SD × M/F), GAN = ψ0.5+ψ1 50/50, +12 practice
-- Trial plan: 12 × 2AFC (same-gender pairs) + 18 × yes/no
-- OpenSpec tasks: 28/33 complete (remaining: real-phone E2E, pilot, QR print verify, uptime monitor)
+**Secrets**: `data/pipeline/deploy_credentials.json`, `scm_cred.json`, `git_remote.txt`
+are gitignored — Azure credentials live there and in App Service settings. Never commit them.

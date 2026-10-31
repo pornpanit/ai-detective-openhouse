@@ -4,6 +4,25 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 7, part 3: background preloading, 2AFC spacing, README rewrite
+
+- **Preload moved to background**: all 51 trial images start downloading
+  silently the moment the plan arrives (resumes included) — the loading gate
+  before Investigation 1 now skips entirely when cached and only appears on
+  genuinely slow connections, with story-flavored text carrying the real
+  count ("Gathering case files… collecting the {n} faces…"). Fixes the
+  confusing loader right after "Start Investigation 1".
+- **2AFC spacing**: gap between the two faces widened to
+  `clamp(16px, 4vw, 36px)` (+ row margins); face size caps adjusted to keep
+  one-screen fit on small phones.
+- **README rewritten** (English only): opens with the project pitch, player
+  view, researcher view, and a plain structure map; operational guides and
+  the maintainer tour preserved below.
+- Cleanup: empty draft-era `public/api/data/` removed.
+- Deployed + verified (features confirmed in served assets).
+
+---
+
 ## 2026-10-31 — Session 7, part 2: custom web icon
 
 - Replaced the placeholder emoji favicon with the project's own `icon.png`

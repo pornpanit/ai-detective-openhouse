@@ -65,11 +65,12 @@ h1, h2 { font-family: Georgia, "Times New Roman", serif; line-height: 1.25; }
   border: 3px solid #2c3a45; object-fit: cover; display: block;
 }
 #jspsych-html-button-response-stripe {
-  display: flex; justify-content: center; align-items: stretch; gap: 12px; margin: 6px 0; padding: 0;
+  display: flex; justify-content: center; align-items: stretch;
+  gap: clamp(16px, 4vw, 36px); margin: 12px 0 16px; padding: 0;
 }
 .jspsych-html-button-response-button { margin: 0 !important; padding: 0 !important; }
 button.pair-btn {
-  width: min(43vw, 38dvh, 210px); aspect-ratio: 1/1; padding: 0;
+  width: min(41vw, 36dvh, 205px); aspect-ratio: 1/1; padding: 0;
   border: 3px solid #2c3a45; border-radius: 12px; overflow: hidden;
   background: none; cursor: pointer;
 }

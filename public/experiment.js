@@ -38,7 +38,27 @@
   const outboxKey = "aidtect_outbox";
 
   const S = { lang: null, session: null, plan: null, quitRequest: false, consentVal: 0,
-              birth_year: 0, gender: "", alias: "", jp: null };
+              birth_year: 0, gender: "", alias: "", jp: null, bgLoad: null, bgDone: false };
+
+  /* Background image preloading: start fetching every trial image the moment
+     the plan arrives (during briefing/training reading time). The preload gate
+     before Investigation 1 then completes instantly unless the connection is
+     genuinely slow. */
+  function startBgPreload(plan) {
+    const files = [
+      ...plan.practice.flatMap((p) => (p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file])),
+      ...plan.round1.flatMap((t) => [t.ai.file, t.real.file]),
+      ...plan.round2.map((t) => t.file),
+    ].map(img);
+    let done = 0;
+    S.bgLoad = Promise.all(files.map((src) => new Promise((res) => {
+      const im = new Image();
+      im.onload = im.onerror = () => { done++; res(); };
+      im.src = src;
+    })));
+    S.bgLoad.count = files.length;
+    return S.bgLoad;
+  }
 
   /* ---------------- persistence layer ---------------- */
   async function postJSON(url, body, attempts = 3) {
@@ -132,8 +152,10 @@
     if (!st || !st.ok) { clearCtx(); return stage1(); }
     S.lang = ctx.lang || "en"; window.GAME_LANG = S.lang;
     S.session = ctx.sid; S.birth_year = ctx.birth_year; S.gender = ctx.gender || "";
+    S.alias = ctx.alias || "";
     if (st.completed) return playedScreen();
     S.plan = st.plan;
+    startBgPreload(S.plan);                 // resume: images may differ per progress, load all
     resumeScreen(st.saved);
   }
 
@@ -231,6 +253,7 @@
       });
       if (res && res.ok) {
         S.session = res.session_id; S.plan = res.plan;
+        startBgPreload(S.plan);             // download silently during briefing + training
         saveCtx();
         stage2({ practice: [], r1: [], r2: [] });
         return;
@@ -336,18 +359,23 @@
       on_load: scrollTop,
     });
 
-    // ---- preload gate ----
+    // ---- preload gate: safety net only — background preloader (started at
+    // bootstrap) has usually cached everything during briefing/training ----
     const files = [
       ...plan.practice.flatMap((p) => (p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file])),
       ...plan.round1.flatMap((t) => [t.ai.file, t.real.file]),
       ...plan.round2.map((t) => t.file),
     ].map(img);
+    if (S.bgLoad) S.bgLoad.then(() => { S.bgDone = true; });
     timeline.push({
-      type: jsPsychPreload,
-      images: files,
-      show_progress_bar: true,
-      message: () => `<div class="card"><h2>${T("loading")}</h2><p class="hint">${fmt(T("loading_sub"), { n: files.length })}</p></div>`,
-      error_message: () => `<p>${T("save_retry")}</p>`,
+      timeline: [{
+        type: jsPsychPreload,
+        images: files,
+        show_progress_bar: true,
+        message: () => `<div class="card"><h2>${T("loading")}</h2><p class="hint">${fmt(T("loading_sub"), { n: files.length })}</p></div>`,
+        error_message: () => `<p>${T("save_retry")}</p>`,
+      }],
+      conditional_function: () => !S.bgDone,   // skip entirely if background load finished
     });
 
     // ---- Investigation 1: 12 × 2AFC ----
