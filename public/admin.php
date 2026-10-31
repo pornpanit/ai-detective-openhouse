@@ -14,7 +14,7 @@ if (!$cookieOk) {
     http_response_code(401);
     header('Content-Type: text/html; charset=utf-8');
     echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-       . '<title>Admin</title><link rel="icon" href="assets/favicon.svg" type="image/svg+xml">'
+       . '<title>Admin</title><link rel="icon" href="assets/icon.png" type="image/png">'
        . '<link rel="stylesheet" href="css/game.css"></head><body>'
        . '<div class="jspsych-display-element"><div class="jspsych-content"><div class="card">'
        . '<h2>Admin</h2><form method="post"><p><label>Password<br>'
@@ -170,7 +170,7 @@ header('Content-Type: text/html; charset=utf-8');
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="60">
 <title>Admin — AI Detective</title>
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/icon.png" type="image/png">
 <link rel="stylesheet" href="css/game.css">
 <style>
 body{background:#f2efe7}

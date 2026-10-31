@@ -4,6 +4,16 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 7, part 2: custom web icon
+
+- Replaced the placeholder emoji favicon with the project's own `icon.png`
+  (user-supplied 1024px artwork, resized to 256px / 40KB at
+  `public/assets/icon.png`) on every page. Old `favicon.svg` removed from
+  repo (a stale copy lingers unreferenced on the server after incremental
+  deploy). Deployed + verified.
+
+---
+
 ## 2026-10-31 — Session 7: signup codenames, one-play lock, survey v2, prize flow, live board, admin v4
 
 ### Player-facing
