@@ -4,6 +4,30 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 12: stamp text, quit simplification, cache fix, docs
+
+### Stamp text changed
+- Investigation 1 + practice pair stamp: "FILED" → **"SUSPECT MARKED"** /
+  **"ระบุตัวแล้ว"** — better detective-theme fit, still neutral (never reveals
+  correctness).
+- Investigation 2 stamps unchanged: "AI"/"REAL" (player's explicit choice).
+
+### Quit flow simplified
+- Button text: "ABORT" → **"QUIT"** / **"ออก"**
+- Flow: quit → confirm → consent question → simple exit page with leaderboard
+  link (no debrief paragraphs — those are for finishers). Old `quitFlow`
+  simplified accordingly.
+
+### Cache fix (root cause of "stamp still shows REAL")
+- `no-cache` meta tags added to `index.html` (Cache-Control, Pragma, Expires)
+  — forces browsers to always re-download the HTML, which then loads the
+  versioned JS/CSS. Version strings bumped `?v=11` → `?v=12`.
+- Root cause explained: the HTML file was cached, so it loaded OLD script
+  URLs without version strings → browser served OLD cached JS. The meta tags
+  prevent HTML caching; version strings handle JS/CSS.
+
+---
+
 ## 2026-10-31 — Session 11: practice stamp fix, prize-before-score, cache-busting
 
 - **Practice pair stamp fixed**: the practice trial (running before

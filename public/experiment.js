@@ -439,8 +439,12 @@
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: v });
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
       } catch {}
-      gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p>
-        <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a></p></div></div>`;
+      // simple exit page — leaderboard link, no debrief
+      gameRoot.innerHTML = `<div class="jspsych-content"><div class="card">
+        <h2>🕵️ ${T("title")}</h2>
+        <p><a class="plain" href="leaderboard.html?lang=${S.lang}" style="font-size:1.3rem">${T("see_board")}</a></p>
+        <p><a class="plain" href="live.html">${T("leaderboard_h")}</a></p>
+        </div></div>`;
     };
     document.getElementById("c-yes").onclick = () => send(1);
     document.getElementById("c-no").onclick = () => send(0);
