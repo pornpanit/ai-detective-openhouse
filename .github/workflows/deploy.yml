@@ -1,0 +1,63 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'scripts/make_deploy_zip.py'
+  workflow_dispatch:  # allow manual trigger from GitHub
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build deploy zip (Python = correct forward-slash separators)
+        run: python scripts/make_deploy_zip.py public deploy.zip
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service
+        run: |
+          az webapp deploy \
+            --name face-detective \
+            --resource-group rg-face-detective \
+            --src-path deploy.zip \
+            --type zip \
+            --output none
+          echo "Deploy completed"
+
+      - name: Health check (with auto-restart fallback)
+        run: |
+          sleep 25
+          for i in 1 2 3; do
+            HEALTH=$(curl -s --max-time 30 https://face-detective.azurewebsites.net/api/health.php || echo "failed")
+            echo "Attempt $i: $HEALTH"
+            if echo "$HEALTH" | grep -q '"ok":true'; then
+              echo "✅ Deploy successful"
+              exit 0
+            fi
+            if [ $i -lt 3 ]; then
+              echo "Health check failed, restarting app..."
+              az webapp restart --name face-detective --resource-group rg-face-detective --output none
+              sleep 30
+            fi
+          done
+          echo "::error::Health check failed after 3 attempts"
+          exit 1
+
+      - name: Azure logout
+        if: always()
+        run: az logout
