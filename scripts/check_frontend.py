@@ -38,8 +38,8 @@ checks = {
     "4.5 no per-trial feedback (R1)": "correct" not in r1_section,
     "4.6 binary AI/Real": 'T("yes")' in js and 'T("no")' in js,
     "4.7 retry + outbox": "outbox" in js and "attempts = 3" in js,
-    "4.8 order consent->survey->score->prize->debrief":
-        (lambda s: s.index('"consent"') < s.index('"survey"') < s.index("score.php") < s.index("prize_join") < s.index("debrief_h"))(stage2),
+    "4.8 order consent->survey->prize->score->debrief":
+        (lambda s: s.index('"consent"') < s.index('"survey"') < s.index("prize_join") < s.index("score.php") < s.index("debrief_h"))(stage2),
     "4.4b alias at signup (stage 1)": 'name="alias"' in js,
     "4.4c alias uniqueness": "alias_taken" in js and "check-alias.php" in js,
     "4.9 theme strings used": 'T("title")' in js and 'T("score_line")' in js,

@@ -4,6 +4,24 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 11: practice stamp fix, prize-before-score, cache-busting
+
+- **Practice pair stamp fixed**: the practice trial (running before
+  Investigation 1) still showed "AI"/"REAL" based on which face was tapped
+  — same ground-truth leak as the Investigation 1 bug fixed in session 10.
+  Now shows neutral "FILED" / "บันทึกแล้ว" (2 occurrences of
+  `stampOverlay("filed")` confirmed in deployed code: practice + Investigation 1).
+- **Flow reorder**: prize offer moved BEFORE score card. New order:
+  `consent → [survey if yes] → prize offer → score card (confetti + share) → debrief`.
+  The score card is now the final climactic reward after all logistics.
+- **Cache-busting**: `?v=11` version strings added to `experiment.js`,
+  `strings.js`, `game.css` in `index.html` — fixes desktop browsers serving
+  stale cached copies (the "no sound/stamp/transition on computer" issue).
+- **Pair composition verified** from production data: 3 sessions sampled,
+  every pair = exactly 1 AI + 1 real, totals = 12 AI + 12 real per session.
+
+---
+
 ## 2026-10-31 — Session 10: stamp leak fix, flow reorder, longer sounds, admin password
 
 ### ⚠ Critical fix: Investigation 1 stamp leaked ground truth

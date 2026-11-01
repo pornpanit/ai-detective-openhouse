@@ -633,7 +633,7 @@
         on_finish: (d) => {
           trialMode(false);
           SoundFX.play("shutter");
-          stampOverlay(d.response === 0 ? (pPair.ai_side === "left" ? "ai" : "real") : (pPair.ai_side === "left" ? "real" : "ai"));
+          stampOverlay("filed");  // NEUTRAL: never reveals which face was AI (same as Investigation 1)
           const chosen = pPair.ai_side === "left" ? (d.response === 0 ? pPair.ai.id : pPair.real.id) : (d.response === 0 ? pPair.real.id : pPair.ai.id);
           saveTrial({ session_id: S.session, round: "practice", trial_index: 1, image_id: chosen, rt_ms: Math.round(d.rt) });
         },
@@ -807,7 +807,31 @@
       conditional_function: () => S.consentVal === 1,
     });
 
-    // ── SCORE + CARD (canvas) — reward after completing research questions ──
+    // ── prize ── (before score card — score card is the final reward)
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <h2>${T("prize_h")}</h2><p>${T("prize_sub")}</p>
+        <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p></div>`,
+      choices: [() => T("prize_join"), () => T("prize_skip")],
+      on_load: scrollTop,
+      on_finish: (d) => { S.prizeJoin = d.response === 0; },
+    });
+    timeline.push({
+      timeline: [{
+        type: jsPsychSurveyHtmlForm,
+        button_label: () => T("prize_join"),
+        html: () => `<div class="card"><h2>${T("prize_h")}</h2>
+          <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p>
+          <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p></div>`,
+        on_finish: async (d) => {
+          try { await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() }); } catch {}
+        },
+      }],
+      conditional_function: () => S.prizeJoin === true,
+    });
+
+    // ── SCORE + CARD (canvas) — the final reward moment ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
@@ -846,30 +870,6 @@
         await flushOutbox();
         clearCtx();
       },
-    });
-
-    // ── prize ──
-    timeline.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
-        <h2>${T("prize_h")}</h2><p>${T("prize_sub")}</p>
-        <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p></div>`,
-      choices: [() => T("prize_join"), () => T("prize_skip")],
-      on_load: scrollTop,
-      on_finish: (d) => { S.prizeJoin = d.response === 0; },
-    });
-    timeline.push({
-      timeline: [{
-        type: jsPsychSurveyHtmlForm,
-        button_label: () => T("prize_join"),
-        html: () => `<div class="card"><h2>${T("prize_h")}</h2>
-          <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p>
-          <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p></div>`,
-        on_finish: async (d) => {
-          try { await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() }); } catch {}
-        },
-      }],
-      conditional_function: () => S.prizeJoin === true,
     });
 
     // ── debrief ──
