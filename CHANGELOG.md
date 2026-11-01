@@ -4,6 +4,33 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-11-01 — Session 16: GitHub → Azure CI/CD pipeline
+
+### Auto-deploy from GitHub push to Azure
+- **GitHub Actions workflow** (`.github/workflows/deploy.yml`): on push to
+  `main` (when `public/**` changes), automatically:
+  1. Checkout code
+  2. Build deploy.zip with Python (correct forward-slash separators)
+  3. Login to Azure via service principal (`AZURE_CREDENTIALS` secret)
+  4. `az webapp deploy --type zip`
+  5. Health check (3 retries with auto-restart fallback)
+  6. Logout
+- **Service principal**: `github-actions-face-detective` (contributor role,
+  scoped to rg-face-detective only)
+- **Trigger conditions**: `public/**` or `scripts/make_deploy_zip.py` changes;
+  also manual via GitHub UI ("Run workflow") or `gh workflow run`
+- **Deploy time**: ~4 minutes
+- **Test verified**: manual trigger → 3m 59s → health check passed ✓
+- README updates on non-code files do NOT trigger a deploy
+
+### What this changes
+- **Before**: manual `python make_deploy_zip.py` + `az webapp deploy` (or
+  wipe-recreate via `scripts/redeploy.py`)
+- **After**: `git push` → auto-deploy in ~4 min
+- **Emergency fallback**: `scripts/redeploy.py` still works for wipe-recreate
+
+---
+
 ## 2026-10-31 — Session 15: Investigation 1 visual flash (replaces text stamp), quit flow survey
 
 ### Investigation 1 stamp: text → visual flash
