@@ -609,7 +609,10 @@
         stimulus: () => `<div class="card"><h2>${T("quit_h")}</h2><p>${T("quit_p")}</p></div>`,
         choices: [() => T("quit_no"), () => T("quit_yes")],
         on_finish: (d) => {
-          if (d.response === 1) { jsPsych.endExperiment(quitFlow); }
+          if (d.response === 1) {
+            jsPsych.endExperiment();   // end timeline (no message — quitFlow renders the exit UI)
+            quitFlow();
+          }
           else { S.quitRequest = false; }
         },
       }],

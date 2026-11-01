@@ -4,6 +4,30 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 13: CRITICAL — endExperiment() function-as-text bug fixed
+
+### Root cause of "raw HTML tags" after quitting
+- `jsPsych.endExperiment(quitFlow)` passed the **function object** as the
+  `end_message` parameter. jsPsych 7 does `DOM_target.innerHTML = end_message`
+  which calls `quitFlow.toString()` — displaying the **JavaScript source code**
+  as raw text on screen. This is exactly what the user saw.
+- **Fix**: `jsPsych.endExperiment()` (no args) followed by a separate
+  `quitFlow()` call. The quit flow now renders properly.
+
+### Stamp still showing "REAL" — stale server file
+- The incremental zip deploy was NOT updating `experiment.js` on the server
+  (same root cause as earlier stale-file issues). **Wipe-recreate** of the
+  Azure app resolved this — all files now verified fresh on production.
+- Confirmed on production: `stampOverlay("filed")` at lines 640, 713;
+  `stamp_filed: "SUSPECT MARKED"` in strings.
+
+### Deployed
+- Wipe-recreate + fresh zip deploy + endExperiment fix deployed together.
+- Verified: `endExperiment()` with no args (1 occurrence),
+  `endExperiment(quitFlow)` (0 occurrences — the bug is gone).
+
+---
+
 ## 2026-10-31 — Session 12: stamp text, quit simplification, cache fix, docs
 
 ### Stamp text changed
