@@ -4,6 +4,50 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 10: stamp leak fix, flow reorder, longer sounds, admin password
+
+### ⚠ Critical fix: Investigation 1 stamp leaked ground truth
+- The 2AFC stamp showed "AI" or "REAL" based on which face was tapped —
+  **this revealed whether the player chose correctly** (per-trial feedback,
+  violating the no-feedback spec). Fixed: Investigation 1 stamps now show a
+  neutral **"FILED" / "บันทึกแล้ว"** (zero correctness information).
+  Investigation 2 stamps ("AI"/"REAL") are safe — they echo the player's
+  explicit button choice. Static check added: `S9 R1 stamp is neutral`.
+- Verified on production: `stampOverlay("filed")` in served JS.
+
+### Flow reorder: consent → [survey] → score card → prize → debrief
+- Score card (count-up, confetti, canvas, share/save) moved AFTER consent
+  and survey — the reward comes after completing research questions.
+- Survey is now **conditional**: only shown when consent = yes
+  (`conditional_function: () => S.consentVal === 1`).
+- Non-consented players skip the survey but still see the full score card
+  (user decision: "score card for all").
+- `finish` action moved from survey's on_finish to score card's on_load
+  (always fires regardless of consent answer).
+
+### Typewriter text fix
+- `.typewriter` CSS: removed `white-space: nowrap` (was truncating long
+  paragraphs on mobile). Replaced with a wrap-friendly fade-in animation.
+
+### Richer sounds (all longer and more satisfying)
+- Typewriter: 10 clicks over 0.8s (was 5/0.3s)
+- Camera shutter: 150ms + reverb tail (was 80ms)
+- Whoosh: 0.8s sweep with rise-fall envelope (was 0.4s)
+- Stamp thunk: deeper impact + low echo tail
+- Fanfare: extended to 6-note ascending phrase
+
+### Admin password
+- Changed from auto-generated to `projectpass99` (Azure app setting, instant).
+- `deploy_credentials.json` updated.
+
+### Verification
+- 25 static checks pass (including 4 new checks for stamp neutrality,
+  survey conditional, flow order, and finish-action placement)
+- Production verified: password login ✓, flow order in served JS ✓,
+  stamp fix confirmed ✓
+
+---
+
 ## 2026-10-31 — Session 9: immersive detective edition (stamps, sounds, confetti, score card, live alerts)
 
 ### Visual: dark classified-terminal theme

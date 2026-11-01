@@ -55,66 +55,81 @@
       const t = this.ctx.currentTime;
       try { this[type] && this[type](t); } catch (e) { /* audio never breaks the game */ }
     },
-    /* Camera shutter: filtered noise burst + click */
+    /* Camera shutter: filtered noise burst + click + reverb tail */
     shutter(t) {
-      const c = this.ctx, dur = 0.08;
+      const c = this.ctx, dur = 0.15;
       const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
       const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.15));
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.12));
       const src = c.createBufferSource(); src.buffer = buf;
-      const filt = c.createBiquadFilter(); filt.type = "highpass"; filt.frequency.value = 2000;
-      const gain = c.createGain(); gain.gain.setValueAtTime(0.18, t); gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      const filt = c.createBiquadFilter(); filt.type = "highpass"; filt.frequency.value = 1800;
+      const gain = c.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
       src.connect(filt); filt.connect(gain); gain.connect(c.destination);
       src.start(t); src.stop(t + dur);
       // low click
-      const osc = c.createOscillator(); osc.frequency.setValueAtTime(800, t); osc.frequency.exponentialRampToValueAtTime(200, t + 0.03);
-      const g2 = c.createGain(); g2.gain.setValueAtTime(0.1, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
-      osc.connect(g2); g2.connect(c.destination); osc.start(t); osc.stop(t + 0.04);
+      const osc = c.createOscillator(); osc.frequency.setValueAtTime(900, t); osc.frequency.exponentialRampToValueAtTime(150, t + 0.05);
+      const g2 = c.createGain(); g2.gain.setValueAtTime(0.12, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.connect(g2); g2.connect(c.destination); osc.start(t); osc.stop(t + 0.06);
+      // reverb tail
+      const osc2 = c.createOscillator(); osc2.type = "sine"; osc2.frequency.value = 400;
+      const g3 = c.createGain(); g3.gain.setValueAtTime(0, t + 0.04);
+      g3.gain.linearRampToValueAtTime(0.05, t + 0.06);
+      g3.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      osc2.connect(g3); g3.connect(c.destination); osc2.start(t + 0.04); osc2.stop(t + 0.16);
     },
-    /* Typewriter: 5 rapid clicks */
+    /* Typewriter: 10 rapid clicks over 0.8s */
     typewriter(t) {
       const c = this.ctx;
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 10; i++) {
         const osc = c.createOscillator(); osc.type = "square";
-        osc.frequency.setValueAtTime(1200 + Math.random() * 600, t + i * 0.06);
+        osc.frequency.setValueAtTime(1100 + Math.random() * 800, t + i * 0.08);
         const g = c.createGain();
-        g.gain.setValueAtTime(0.06, t + i * 0.06);
-        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.03);
+        g.gain.setValueAtTime(0.07, t + i * 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.04);
         osc.connect(g); g.connect(c.destination);
-        osc.start(t + i * 0.06); osc.stop(t + i * 0.06 + 0.04);
+        osc.start(t + i * 0.08); osc.stop(t + i * 0.08 + 0.05);
       }
     },
-    /* Whoosh: filtered noise sweep */
+    /* Whoosh: 0.8s filtered noise sweep */
     whoosh(t) {
-      const c = this.ctx, dur = 0.4;
+      const c = this.ctx, dur = 0.8;
       const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
       const d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       const src = c.createBufferSource(); src.buffer = buf;
-      const filt = c.createBiquadFilter(); filt.type = "bandpass"; filt.Q.value = 2;
-      filt.frequency.setValueAtTime(200, t); filt.frequency.exponentialRampToValueAtTime(2000, t + dur * 0.7);
+      const filt = c.createBiquadFilter(); filt.type = "bandpass"; filt.Q.value = 1.5;
+      filt.frequency.setValueAtTime(150, t); filt.frequency.exponentialRampToValueAtTime(2400, t + dur * 0.6);
+      filt.frequency.exponentialRampToValueAtTime(300, t + dur);
       const gain = c.createGain();
-      gain.gain.setValueAtTime(0.08, t); gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.1, t + dur * 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
       src.connect(filt); filt.connect(gain); gain.connect(c.destination);
       src.start(t); src.stop(t + dur);
     },
-    /* Stamp thunk: low-frequency impact */
+    /* Stamp thunk: low-frequency impact + echo */
     stamp(t) {
       const c = this.ctx;
       const osc = c.createOscillator(); osc.type = "sine";
-      osc.frequency.setValueAtTime(120, t); osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-      const g = c.createGain(); g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-      osc.connect(g); g.connect(c.destination); osc.start(t); osc.stop(t + 0.15);
+      osc.frequency.setValueAtTime(140, t); osc.frequency.exponentialRampToValueAtTime(35, t + 0.12);
+      const g = c.createGain(); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      osc.connect(g); g.connect(c.destination); osc.start(t); osc.stop(t + 0.18);
+      // echo
+      const osc2 = c.createOscillator(); osc2.type = "sine"; osc2.frequency.value = 80;
+      const g2 = c.createGain(); g2.gain.setValueAtTime(0, t + 0.08);
+      g2.gain.linearRampToValueAtTime(0.08, t + 0.1);
+      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      osc2.connect(g2); g2.connect(c.destination); osc2.start(t + 0.08); osc2.stop(t + 0.35);
     },
-    /* Fanfare: major arpeggio */
+    /* Fanfare: extended 6-note phrase */
     fanfare(t) {
-      const c = this.ctx, notes = [523, 659, 784, 1047];
+      const c = this.ctx, notes = [523, 587, 659, 784, 880, 1047];
       notes.forEach((freq, i) => {
         const osc = c.createOscillator(); osc.type = "triangle"; osc.frequency.value = freq;
         const g = c.createGain();
-        const start = t + i * 0.12, dur = 0.35;
+        const start = t + i * 0.14, dur = 0.45;
         g.gain.setValueAtTime(0, start);
-        g.gain.linearRampToValueAtTime(0.12, start + 0.02);
+        g.gain.linearRampToValueAtTime(0.13, start + 0.03);
         g.gain.exponentialRampToValueAtTime(0.001, start + dur);
         osc.connect(g); g.connect(c.destination); osc.start(start); osc.stop(start + dur);
       });
@@ -691,7 +706,7 @@
           hideQuit();
           if (S.quitRequest) return;
           SoundFX.play("shutter");
-          stampOverlay(d.response === 0 ? (t.ai_side === "left" ? "ai" : "real") : (t.ai_side === "left" ? "real" : "ai"));
+          stampOverlay("filed");  // NEUTRAL: never reveals which face was AI
           const chosen = t.ai_side === "left"
             ? (d.response === 0 ? t.ai.id : t.real.id) : (d.response === 0 ? t.real.id : t.ai.id);
           saveTrial({ session_id: S.session, round: "1", trial_index: i + 1, image_id: chosen, rt_ms: Math.round(d.rt) });
@@ -736,7 +751,63 @@
       timeline.push(quitConfirmNode());
     });
 
-    // ── SCORE + CARD (canvas) ──
+    // ── consent ── (FIRST: ask before showing results)
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: () => `<div class="card"><h2>${T("consent_h")}</h2><p>${T("consent_q")}</p>
+        <p class="hint">${T("consent_what")}</p></div>`,
+      choices: [() => T("consent_yes"), () => T("consent_no")],
+      on_load: scrollTop,
+      on_finish: (d) => {
+        S.consentVal = d.response === 0 ? 1 : 0;
+        postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: S.consentVal }).catch(() => {});
+      },
+    });
+
+    // ── survey v2 (conditional: only if consented) ──
+    const opts = (arr) => [`<option value="">${T("select")}</option>`, ...arr.map((l, i) => `<option value="${i}">${l}</option>`)].join("");
+    const qs = (id, parent, text, arr) =>
+      `<p class="svq" data-q="${id}"${parent ? ` data-parent="${parent}" style="display:none"` : ""}>
+        <label>${text}<br><select name="${id}"${parent ? "" : " required"}>${opts(arr)}</select></label></p>`;
+    timeline.push({
+      timeline: [{
+        type: jsPsychSurveyHtmlForm,
+        button_label: () => T("continue"),
+        html: () => `<div class="card"><h2>${T("survey_h")}</h2><p class="hint">${T("survey_sub")}</p>
+          ${qs("q1", "", T("q1"), T("opt_ever"))}${qs("q2", "q1", T("q2"), T("opt_freq5"))}
+          ${qs("q3", "", T("q3"), T("opt_ever"))}${qs("q4", "q3", T("q4"), T("opt_freq5"))}
+          ${qs("q5", "", T("q5"), T("opt_is"))}
+          ${qs("q6", "", T("q6"), T("opt_ever"))}${qs("q7", "q6", T("q7"), T("opt_freq5"))}
+          ${qs("q8", "", T("q8"), T("opt_fam5"))}</div>`,
+        on_load: () => {
+          scrollTop();
+          document.querySelectorAll("select[name^=q]").forEach((sel) => {
+            sel.addEventListener("change", () => {
+              const isYes = sel.value === "0";
+              document.querySelectorAll(`.svq[data-parent="${sel.name}"]`).forEach((row) => {
+                row.style.display = isYes ? "" : "none";
+                row.querySelector("select").required = isYes;
+                if (!isYes) row.querySelector("select").value = "";
+              });
+            });
+          });
+        },
+        on_finish: async (d) => {
+          const val = (id) => (d.response[id] === "" || d.response[id] === undefined ? null : Number(d.response[id]));
+          const yn = (v) => (v === null ? null : (v === 0 ? 1 : 0));
+          const fr = (v) => v;
+          const fam = (v) => (v === null ? null : v + 1);
+          const f = { f1: yn(val("q1")), f2: fr(val("q2")), f3: yn(val("q3")), f4: fr(val("q4")),
+                      f5: yn(val("q5")), f6: yn(val("q6")), f7: fr(val("q7")), f8: fam(val("q8")) };
+          try {
+            await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey", ...f });
+          } catch {}
+        },
+      }],
+      conditional_function: () => S.consentVal === 1,
+    });
+
+    // ── SCORE + CARD (canvas) — reward after completing research questions ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
@@ -754,17 +825,13 @@
       on_load: async () => {
         scrollTop();
         SoundFX.play("fanfare");
+        // mark session as finished (always fires, regardless of consent)
+        postJSON(`${API}/finalize.php`, { session_id: S.session, action: "finish" }).catch(() => {});
         const sc = await (await fetch(`${API}/score.php?session_id=${S.session}`)).json();
         const pct = sc && sc.total ? Math.round((100 * sc.correct) / sc.total) : 0;
-        const rank = getRank(pct);
-        // count-up
-        const scoreEl = document.getElementById("score");
-        countUp(scoreEl, pct, 1400);
-        setTimeout(() => {
-          confettiBurst();
-        }, 1400);
+        countUp(document.getElementById("score"), pct, 1400);
+        setTimeout(() => confettiBurst(), 1400);
         document.getElementById("score-sub").textContent = fmt(T("score_sub"), { p: pct });
-        // render card
         const canvas = document.getElementById("score-card-canvas");
         if (canvas) {
           renderScoreCard(canvas, S.alias, pct);
@@ -775,61 +842,9 @@
           shareBtn.onclick = () => shareScoreCard(canvas);
         }
       },
-    });
-
-    // ── consent ──
-    timeline.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><h2>${T("consent_h")}</h2><p>${T("consent_q")}</p>
-        <p class="hint">${T("consent_what")}</p></div>`,
-      choices: [() => T("consent_yes"), () => T("consent_no")],
-      on_load: scrollTop,
-      on_finish: (d) => {
-        S.consentVal = d.response === 0 ? 1 : 0;
-        postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: S.consentVal }).catch(() => {});
-      },
-    });
-
-    // ── survey v2 ──
-    const opts = (arr) => [`<option value="">${T("select")}</option>`, ...arr.map((l, i) => `<option value="${i}">${l}</option>`)].join("");
-    const qs = (id, parent, text, arr) =>
-      `<p class="svq" data-q="${id}"${parent ? ` data-parent="${parent}" style="display:none"` : ""}>
-        <label>${text}<br><select name="${id}"${parent ? "" : " required"}>${opts(arr)}</select></label></p>`;
-    timeline.push({
-      type: jsPsychSurveyHtmlForm,
-      button_label: () => T("continue"),
-      html: () => `<div class="card"><h2>${T("survey_h")}</h2><p class="hint">${T("survey_sub")}</p>
-        ${qs("q1", "", T("q1"), T("opt_ever"))}${qs("q2", "q1", T("q2"), T("opt_freq5"))}
-        ${qs("q3", "", T("q3"), T("opt_ever"))}${qs("q4", "q3", T("q4"), T("opt_freq5"))}
-        ${qs("q5", "", T("q5"), T("opt_is"))}
-        ${qs("q6", "", T("q6"), T("opt_ever"))}${qs("q7", "q6", T("q7"), T("opt_freq5"))}
-        ${qs("q8", "", T("q8"), T("opt_fam5"))}</div>`,
-      on_load: () => {
-        scrollTop();
-        document.querySelectorAll("select[name^=q]").forEach((sel) => {
-          sel.addEventListener("change", () => {
-            const isYes = sel.value === "0";
-            document.querySelectorAll(`.svq[data-parent="${sel.name}"]`).forEach((row) => {
-              row.style.display = isYes ? "" : "none";
-              row.querySelector("select").required = isYes;
-              if (!isYes) row.querySelector("select").value = "";
-            });
-          });
-        });
-      },
-      on_finish: async (d) => {
-        const val = (id) => (d.response[id] === "" || d.response[id] === undefined ? null : Number(d.response[id]));
-        const yn = (v) => (v === null ? null : (v === 0 ? 1 : 0));
-        const fr = (v) => v;
-        const fam = (v) => (v === null ? null : v + 1);
-        const f = { f1: yn(val("q1")), f2: fr(val("q2")), f3: yn(val("q3")), f4: fr(val("q4")),
-                    f5: yn(val("q5")), f6: yn(val("q6")), f7: fr(val("q7")), f8: fam(val("q8")) };
-        try {
-          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey", ...f });
-          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "finish" });
-          await flushOutbox();
-          clearCtx();
-        } catch {}
+      on_finish: async () => {
+        await flushOutbox();
+        clearCtx();
       },
     });
 

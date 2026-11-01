@@ -38,8 +38,8 @@ checks = {
     "4.5 no per-trial feedback (R1)": "correct" not in r1_section,
     "4.6 binary AI/Real": 'T("yes")' in js and 'T("no")' in js,
     "4.7 retry + outbox": "outbox" in js and "attempts = 3" in js,
-    "4.8 order score->consent->survey->prize->debrief":
-        (lambda s: s.index("score.php") < s.index('"consent"') < s.index('"survey"') < s.index("prize_join") < s.index("debrief_h"))(stage2),
+    "4.8 order consent->survey->score->prize->debrief":
+        (lambda s: s.index('"consent"') < s.index('"survey"') < s.index("score.php") < s.index("prize_join") < s.index("debrief_h"))(stage2),
     "4.4b alias at signup (stage 1)": 'name="alias"' in js,
     "4.4c alias uniqueness": "alias_taken" in js and "check-alias.php" in js,
     "4.9 theme strings used": 'T("title")' in js and 'T("score_line")' in js,
@@ -53,6 +53,14 @@ checks = {
     "S1 post_trial_gap": "post_trial_gap" in js,
     "S1 no RT contamination (stamps in on_finish only)":
         all("stampOverlay" not in line for line in js.split("\n") if "on_load" in line and "trialMode" not in line),
+    "S9 R1 stamp is neutral (FILED, not AI/REAL)":
+        'stampOverlay("filed")' in js and 'stampOverlay("filed")' in js.split("round1.forEach")[1].split("round2.forEach")[0],
+    "S9 R2 stamp shows player choice (AI/REAL)":
+        'stampOverlay(d.response === 0 ? "ai" : "real")' in js.split("round2.forEach")[1],
+    "S9 survey conditional on consent":
+        'conditional_function: () => S.consentVal === 1' in js,
+    "S9 finish action in score card (always fires)":
+        'action: "finish"' in js,
 }
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)
