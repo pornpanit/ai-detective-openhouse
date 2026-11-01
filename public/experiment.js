@@ -155,7 +155,25 @@
     document.body.appendChild(btn);
   }
 
-  /* ═══════════════════ STAMP OVERLAY (player's CHOICE, never correctness) ═══════════════════ */
+  /* ═══════════════════ VISUAL STAMP ( Investigation 1: glow effect, Investigation 2: text stamp ) ═══════════════════ */
+  /* Investigation 1 + practice pair: golden border flash on selected face (no text = no ambiguity) */
+  function faceFlash(btnEl) {
+    if (!btnEl) return;
+    btnEl.style.transition = "all .15s ease";
+    btnEl.style.borderColor = "#f5a623";
+    btnEl.style.boxShadow = "0 0 20px rgba(245,166,35,.6)";
+    btnEl.style.transform = "scale(.94)";
+    setTimeout(() => {
+      btnEl.style.transform = "scale(1.02)";
+      setTimeout(() => {
+        btnEl.style.transform = "scale(1)";
+        btnEl.style.boxShadow = "";
+        btnEl.style.borderColor = "";
+      }, 120);
+    }, 100);
+  }
+
+  /* Investigation 2: text stamp (player's explicit choice — safe) */
   function stampOverlay(choice) {
     removeStamp();
     const el = document.createElement("div");
@@ -430,24 +448,109 @@
 
   async function quitFlow() {
     hideQuit(); await flushOutbox(); clearCtx();
+
+    // Step 1: consent question
     gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><div class="case-tag">${T("title")}</div>
       <h2>${T("quit_debrief")}</h2><p>${T("consent_q")}</p><p class="hint">${T("consent_what")}</p>
       <div><button class="jspsych-btn" id="c-yes">${T("consent_yes")}</button>
       <button class="jspsych-btn jspsych-btn--secondary" id="c-no">${T("consent_no")}</button></div></div></div>`;
-    const send = async (v) => {
-      try {
-        await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: v });
-        await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
-      } catch {}
-      // simple exit page — leaderboard link, no debrief
+
+    const exitPage = () => {
       gameRoot.innerHTML = `<div class="jspsych-content"><div class="card">
         <h2>🕵️ ${T("title")}</h2>
         <p><a class="plain" href="leaderboard.html?lang=${S.lang}" style="font-size:1.3rem">${T("see_board")}</a></p>
         <p><a class="plain" href="live.html">${T("leaderboard_h")}</a></p>
         </div></div>`;
     };
-    document.getElementById("c-yes").onclick = () => send(1);
-    document.getElementById("c-no").onclick = () => send(0);
+
+    const finalize = async (consentVal) => {
+      try {
+        await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: consentVal });
+        await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
+      } catch {}
+      exitPage();
+    };
+
+    // If YES → save consent, show survey, then exit
+    document.getElementById("c-yes").onclick = async () => {
+      try { await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: 1 }); } catch {}
+
+      // Step 2: survey (only if consented)
+      const opts = (arr) => [`<option value="">${T("select")}</option>`, ...arr.map((l, i) => `<option value="${i}">${l}</option>`)].join("");
+      const qs = (id, parent, text, arr) =>
+        `<p class="svq" data-q="${id}"${parent ? ` data-parent="${parent}" style="display:none"` : ""}>
+          <label>${text}<br><select name="${id}"${parent ? "" : " required"}>${opts(arr)}</select></label></p>`;
+
+      gameRoot.innerHTML = `<div class="jspsych-content"><div class="card">
+        <h2>${T("survey_h")}</h2><p class="hint">${T("survey_sub")}</p>
+        ${qs("q1","","q1","opt_ever")}${qs("q2","q1","q2","opt_freq5")}
+        ${qs("q3","","q3","opt_ever")}${qs("q4","q3","q4","opt_freq5")}
+        ${qs("q5","","q5","opt_is")}
+        ${qs("q6","","q6","opt_ever")}${qs("q7","q6","q7","opt_freq5")}
+        ${qs("q8","","q8","opt_fam5")}
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="jspsych-btn" id="survey-submit">${T("continue")}</button>
+        </div></div>`;
+
+      // Resolve string keys for the survey
+      gameRoot.querySelectorAll("select[name^=q]").forEach(sel => {
+        // Replace question text with proper i18n
+        const label = sel.closest("label");
+        if (label && label.childNodes[0]) {
+          const qKey = sel.name;
+          label.childNodes[0].textContent = T(qKey) + "\n";
+        }
+        // Replace option text
+        [...sel.options].forEach((opt, idx) => {
+          if (idx === 0) { opt.textContent = T("select"); return; }
+          const optKey = sel.name === "q2" || sel.name === "q4" || sel.name === "q7" ? "opt_freq5"
+                       : sel.name === "q8" ? "opt_fam5"
+                       : sel.name === "q5" ? "opt_is" : "opt_ever";
+          const arr = T(optKey);
+          if (arr && arr[idx-1] !== undefined) opt.textContent = arr[idx-1];
+        });
+      });
+
+      // Branching logic (Q2/Q4/Q7 conditional on parent)
+      gameRoot.querySelectorAll("select[name^=q]").forEach(sel => {
+        sel.addEventListener("change", () => {
+          const isYes = sel.value === "0";
+          gameRoot.querySelectorAll(`.svq[data-parent="${sel.name}"]`).forEach(row => {
+            row.style.display = isYes ? "" : "none";
+            row.querySelector("select").required = isYes;
+            if (!isYes) row.querySelector("select").value = "";
+          });
+        });
+      });
+
+      // Survey submit
+      document.getElementById("survey-submit").onclick = async () => {
+        // Validate required selects
+        const required = [...gameRoot.querySelectorAll("select[required]")];
+        const missing = required.filter(s => !s.value);
+        if (missing.length > 0) { missing[0].focus(); return; }
+
+        const val = (id) => {
+          const el = gameRoot.querySelector(`select[name="${id}"]`);
+          return el && el.value !== "" ? Number(el.value) : null;
+        };
+        const yn = (v) => v === null ? null : (v === 0 ? 1 : 0);
+        const fam = (v) => v === null ? null : v + 1;
+        const f = {
+          f1: yn(val("q1")), f2: val("q2"), f3: yn(val("q3")), f4: val("q4"),
+          f5: yn(val("q5")), f6: yn(val("q6")), f7: val("q7"), f8: fam(val("q8")),
+        };
+        try {
+          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey", ...f });
+          await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
+        } catch {}
+        exitPage();
+      };
+    };
+
+    // If NO → skip survey, exit directly
+    document.getElementById("c-no").onclick = () => finalize(0);
   }
 
   /* ═══════════════════ STARTUP ═══════════════════ */
@@ -640,7 +743,8 @@
         on_finish: (d) => {
           trialMode(false);
           SoundFX.play("shutter");
-          stampOverlay("filed");  // NEUTRAL: never reveals which face was AI (same as Investigation 1)
+          const btn = document.querySelector(`[data-choice="${d.response}"]`);
+          faceFlash(btn);  // visual flash — no text, no correctness info
           const chosen = pPair.ai_side === "left" ? (d.response === 0 ? pPair.ai.id : pPair.real.id) : (d.response === 0 ? pPair.real.id : pPair.ai.id);
           saveTrial({ session_id: S.session, round: "practice", trial_index: 1, image_id: chosen, rt_ms: Math.round(d.rt) });
         },
@@ -713,7 +817,8 @@
           hideQuit();
           if (S.quitRequest) return;
           SoundFX.play("shutter");
-          stampOverlay("filed");  // NEUTRAL: never reveals which face was AI
+          const btn = document.querySelector(`[data-choice="${d.response}"]`);
+          faceFlash(btn);  // golden glow on selected face — no text, no correctness info
           const chosen = t.ai_side === "left"
             ? (d.response === 0 ? t.ai.id : t.real.id) : (d.response === 0 ? t.real.id : t.ai.id);
           saveTrial({ session_id: S.session, round: "1", trial_index: i + 1, image_id: chosen, rt_ms: Math.round(d.rt) });

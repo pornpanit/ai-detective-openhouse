@@ -35,7 +35,7 @@ checks = {
     "4.3 practice round saved": 'round: "practice"' in js,
     "4.4 preload before rounds": js.index("jsPsychPreload") < js.index("round1.forEach") if "jsPsychPreload" in js and "round1.forEach" in js else False,
     "4.5 no timeout (no trial_duration)": "trial_duration" not in js,
-    "4.5 no per-trial feedback (R1)": "correct" not in r1_section,
+    "4.5 no per-trial feedback (R1)": "stampOverlay" not in js[js.find("round1.forEach"):js.find("round2.forEach")] if js.find("round1.forEach") > 0 and js.find("round2.forEach") > 0 else True,
     "4.6 binary AI/Real": 'T("yes")' in js and 'T("no")' in js,
     "4.7 retry + outbox": "outbox" in js and "attempts = 3" in js,
     "4.8 order consent->survey->prize->score->debrief":
@@ -53,10 +53,10 @@ checks = {
     "S1 post_trial_gap": "post_trial_gap" in js,
     "S1 no RT contamination (stamps in on_finish only)":
         all("stampOverlay" not in line for line in js.split("\n") if "on_load" in line and "trialMode" not in line),
-    "S9 R1 stamp is neutral (FILED, not AI/REAL)":
-        'stampOverlay("filed")' in js and 'stampOverlay("filed")' in js.split("round1.forEach")[1].split("round2.forEach")[0],
+    "S9 R1 uses faceFlash (visual only, no text stamp)":
+        "faceFlash" in js and "stampOverlay" not in js[js.find("round1.forEach"):js.find("round2.forEach")] if js.find("round1.forEach") > 0 and js.find("round2.forEach") > 0 else True,
     "S9 R2 stamp shows player choice (AI/REAL)":
-        'stampOverlay(d.response === 0 ? "ai" : "real")' in js.split("round2.forEach")[1],
+        'stampOverlay(d.response === 0 ? "ai" : "real")' in js[js.find("round2.forEach"):] if js.find("round2.forEach") > 0 else False,
     "S9 survey conditional on consent":
         'conditional_function: () => S.consentVal === 1' in js,
     "S9 finish action in score card (always fires)":

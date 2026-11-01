@@ -4,6 +4,26 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 15: Investigation 1 visual flash (replaces text stamp), quit flow survey
+
+### Investigation 1 stamp: text → visual flash
+- **Replaced** the "SUSPECT MARKED" text stamp with a **golden border glow + scale animation** on the selected face. No text = no text can be wrong. The user had persistent issues with the text stamp showing "REAL" despite correct server code (likely a deep caching issue).
+- Investigation 1 + practice pair: `faceFlash(btn)` — visual only, zero correctness info.
+- Investigation 2 + practice single: unchanged — text stamps "AI"/"REAL" (player's explicit button choice, safe).
+
+### Quit flow: survey added after consent=yes
+- When a player quits and selects **"Yes — use my data"**: the 8-question survey renders
+  (same branching logic Q2/Q4/Q7 as the normal flow). After submit → exit page.
+- When **"No"**: skips survey → exit page directly (unchanged).
+- Survey rendered via DOM manipulation (quit path bypasses jsPsych timeline).
+
+### Deployment
+- Incremental zip deploy AGAIN failed to update experiment.js → **wipe-recreate** performed.
+- Created `scripts/redeploy.py` for reliable wipe-recreate + verify.
+- All verified: `faceFlash` calls 3, `survey-submit` in quit flow ✓, `quitFlow` present ✓.
+
+---
+
 ## 2026-10-31 — Session 14: admin v6 — separate R1/R2, confusion matrix, scatter, survey, toggle fix
 
 ### Admin dashboard v6 (major restructure)
