@@ -4,6 +4,35 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 14: admin v6 — separate R1/R2, confusion matrix, scatter, survey, toggle fix
+
+### Admin dashboard v6 (major restructure)
+- **Separate Investigation 1 / Investigation 2 sections** with round-specific
+  metrics, RT histograms, and accuracy-by-cohort charts.
+- **Investigation 1**: AI faces spotted by type (gan/diffusion only — "real"
+  rows excluded by design since they represent wrong answers in 2AFC).
+- **Investigation 2**: hit rate + correct rejection rate + response bias +
+  confusion matrix (TP/FN/FP/TN with counts and percentages, colored cells).
+- **Speed–accuracy scatter plot**: each dot = 1 participant, colored by
+  generation cohort (Gen X red, Millennial blue, Gen Z green). Shows
+  speed-accuracy tradeoff.
+- **Accuracy distribution histogram**: grouped bars by generation
+  (0–40%, 40–60%, 60–80%, 80–100% bins).
+- **Survey data panel**: 8 questions with aggregated response distributions
+  (percentage bars per option, using familiarity_1..8 from consented sessions).
+- **Toggle fix**: replaced nested `<form>` inside table cells with JavaScript
+  `fetch()` call to `admin.php?api=1` — both hide AND un-hide now work
+  reliably across all browsers.
+- **Test data cleanup**: 12 test sessions deleted permanently
+  (kept "Test" and "test2" only; also kept "Saranpat" [flagged] and
+  "Baitoey"/"incognito" [real players]).
+
+### Verified on production
+- All 9 features confirmed via authenticated page fetch.
+- PHP lint clean. No game code changes — admin only.
+
+---
+
 ## 2026-10-31 — Session 13: CRITICAL — endExperiment() function-as-text bug fixed
 
 ### Root cause of "raw HTML tags" after quitting
