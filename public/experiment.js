@@ -1,28 +1,18 @@
-/* AI Detective — experiment client (jsPsych 7.3.4)
-   Startup: saved session? → resume / already-played screen : fresh flow.
-   Fresh: language → briefing → demographics → prepare screen (bootstrap) →
-   Stage 2: training → preload → Inv.1 (12 × 2AFC) → Inv.2 (24 × yes/no) →
-   score → alias → consent → survey → debrief.
-   One trial per screen (no scrolling). Quit = jsPsych-native confirm trial;
-   the interrupted trial is discarded (never saved). Reload-safe: every
-   answered trial is on the server before the next one starts. */
+/* ═══════════════════════════════════════════════════════════════════════
+   AI DETECTIVE — experiment client (jsPsych 7.3.4)
+   Dark classified-terminal edition: stamps, sounds, confetti, score card.
+   RT SAFETY: all audio + stamp animations fire POST-response or between rounds.
+   ═══════════════════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
   const API = "api";
   const ASSETS = "assets";
   const initFnBase = (typeof initJsPsych === "function") ? initJsPsych : jsPsychModule.initJsPsych;
 
-  /* Dedicated game root: every jsPsych run and every custom screen renders
-     into this one container. NOTE: jsPsych 7.3.4 plugins append without
-     removing previous trials (verified by scripts/jsdom_trial_test.js), so we
-     clear the content element on every on_trial_start. */
+  /* ─── Game root ─── */
   const gameRoot = (() => {
     let el = document.getElementById("game-root");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "game-root";
-      document.body.appendChild(el);
-    }
+    if (!el) { el = document.createElement("div"); el.id = "game-root"; document.body.appendChild(el); }
     return el;
   })();
   const initFn = (opts = {}) => initFnBase({
@@ -31,59 +21,356 @@
       const c = gameRoot.querySelector("#jspsych-content");
       if (c) c.innerHTML = "";
       scrollTop();
+      removeStamp();
     },
   });
 
   const ctxKey = "aidtect_ctx";
   const outboxKey = "aidtect_outbox";
-
   const S = { lang: null, session: null, plan: null, quitRequest: false, consentVal: 0,
-              birth_year: 0, gender: "", alias: "", jp: null, bgLoad: null, bgDone: false };
+              birth_year: 0, gender: "", alias: "", jp: null, bgLoad: null, bgDone: false, prizeJoin: false };
 
-  /* Background image preloading: start fetching every trial image the moment
-     the plan arrives (during briefing/training reading time). The preload gate
-     before Investigation 1 then completes instantly unless the connection is
-     genuinely slow. */
-  function startBgPreload(plan) {
-    const files = [
-      ...plan.practice.flatMap((p) => (p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file])),
-      ...plan.round1.flatMap((t) => [t.ai.file, t.real.file]),
-      ...plan.round2.map((t) => t.file),
-    ].map(img);
-    let done = 0;
-    S.bgLoad = Promise.all(files.map((src) => new Promise((res) => {
-      const im = new Image();
-      im.onload = im.onerror = () => { done++; res(); };
-      im.src = src;
-    })));
-    S.bgLoad.count = files.length;
-    return S.bgLoad;
+  /* ═══════════════════ SOUND ENGINE (WebAudio, zero files) ═══════════════════ */
+  const SoundFX = {
+    ctx: null,
+    muted: (() => { try { return localStorage.getItem("aidtect_muted") === "1"; } catch { return false; } })(),
+    init() {
+      if (!this.ctx) {
+        try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { this.ctx = null; }
+      }
+      if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+    },
+    toggle() {
+      this.muted = !this.muted;
+      try { localStorage.setItem("aidtect_muted", this.muted ? "1" : "0"); } catch {}
+      const btn = document.getElementById("mute-btn");
+      if (btn) { btn.textContent = this.muted ? T("mute_off") : T("mute_on"); btn.classList.toggle("muted", this.muted); }
+      return this.muted;
+    },
+    play(type) {
+      if (this.muted) return;
+      this.init();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      try { this[type] && this[type](t); } catch (e) { /* audio never breaks the game */ }
+    },
+    /* Camera shutter: filtered noise burst + click */
+    shutter(t) {
+      const c = this.ctx, dur = 0.08;
+      const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.15));
+      const src = c.createBufferSource(); src.buffer = buf;
+      const filt = c.createBiquadFilter(); filt.type = "highpass"; filt.frequency.value = 2000;
+      const gain = c.createGain(); gain.gain.setValueAtTime(0.18, t); gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(filt); filt.connect(gain); gain.connect(c.destination);
+      src.start(t); src.stop(t + dur);
+      // low click
+      const osc = c.createOscillator(); osc.frequency.setValueAtTime(800, t); osc.frequency.exponentialRampToValueAtTime(200, t + 0.03);
+      const g2 = c.createGain(); g2.gain.setValueAtTime(0.1, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+      osc.connect(g2); g2.connect(c.destination); osc.start(t); osc.stop(t + 0.04);
+    },
+    /* Typewriter: 5 rapid clicks */
+    typewriter(t) {
+      const c = this.ctx;
+      for (let i = 0; i < 5; i++) {
+        const osc = c.createOscillator(); osc.type = "square";
+        osc.frequency.setValueAtTime(1200 + Math.random() * 600, t + i * 0.06);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.06, t + i * 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.03);
+        osc.connect(g); g.connect(c.destination);
+        osc.start(t + i * 0.06); osc.stop(t + i * 0.06 + 0.04);
+      }
+    },
+    /* Whoosh: filtered noise sweep */
+    whoosh(t) {
+      const c = this.ctx, dur = 0.4;
+      const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = c.createBufferSource(); src.buffer = buf;
+      const filt = c.createBiquadFilter(); filt.type = "bandpass"; filt.Q.value = 2;
+      filt.frequency.setValueAtTime(200, t); filt.frequency.exponentialRampToValueAtTime(2000, t + dur * 0.7);
+      const gain = c.createGain();
+      gain.gain.setValueAtTime(0.08, t); gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(filt); filt.connect(gain); gain.connect(c.destination);
+      src.start(t); src.stop(t + dur);
+    },
+    /* Stamp thunk: low-frequency impact */
+    stamp(t) {
+      const c = this.ctx;
+      const osc = c.createOscillator(); osc.type = "sine";
+      osc.frequency.setValueAtTime(120, t); osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+      const g = c.createGain(); g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(g); g.connect(c.destination); osc.start(t); osc.stop(t + 0.15);
+    },
+    /* Fanfare: major arpeggio */
+    fanfare(t) {
+      const c = this.ctx, notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        const osc = c.createOscillator(); osc.type = "triangle"; osc.frequency.value = freq;
+        const g = c.createGain();
+        const start = t + i * 0.12, dur = 0.35;
+        g.gain.setValueAtTime(0, start);
+        g.gain.linearRampToValueAtTime(0.12, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.connect(g); g.connect(c.destination); osc.start(start); osc.stop(start + dur);
+      });
+    },
+    /* Confetti pop: short high blip */
+    pop(t) {
+      const c = this.ctx;
+      const osc = c.createOscillator(); osc.type = "sine";
+      osc.frequency.setValueAtTime(600 + Math.random() * 1200, t);
+      osc.frequency.exponentialRampToValueAtTime(200, t + 0.06);
+      const g = c.createGain(); g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      osc.connect(g); g.connect(c.destination); osc.start(t); osc.stop(t + 0.1);
+    },
+  };
+
+  function setupMuteToggle() {
+    if (document.getElementById("mute-btn")) return;
+    const btn = document.createElement("button");
+    btn.id = "mute-btn";
+    btn.textContent = SoundFX.muted ? T("mute_off") : T("mute_on");
+    btn.classList.toggle("muted", SoundFX.muted);
+    btn.onclick = () => SoundFX.toggle();
+    document.body.appendChild(btn);
   }
 
-  /* ---------------- persistence layer ---------------- */
+  /* ═══════════════════ STAMP OVERLAY (player's CHOICE, never correctness) ═══════════════════ */
+  function stampOverlay(choice) {
+    removeStamp();
+    const el = document.createElement("div");
+    el.id = "stamp-overlay";
+    el.className = choice === "ai" ? "stamp-ai" : "stamp-real";
+    el.textContent = choice === "ai" ? T("stamp_ai") : T("stamp_real");
+    document.body.appendChild(el);
+    SoundFX.play("stamp");
+  }
+  function removeStamp() { document.getElementById("stamp-overlay")?.remove(); }
+
+  /* ═══════════════════ CONFETTI (canvas particles) ═══════════════════ */
+  function confettiBurst(duration = 2500) {
+    const canvas = document.createElement("canvas");
+    canvas.id = "confetti-canvas";
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    document.body.appendChild(canvas);
+    const ctx2d = canvas.getContext("2d");
+    const colors = ["#f5a623", "#f5c542", "#e8534a", "#4e8d5b", "#3f7cac", "#c8d6e5"];
+    const particles = [];
+    for (let i = 0; i < 80; i++) {
+      particles.push({
+        x: canvas.width / 2 + (Math.random() - 0.5) * 100,
+        y: canvas.height / 3,
+        vx: (Math.random() - 0.5) * 12,
+        vy: -(Math.random() * 10 + 4),
+        size: Math.random() * 6 + 3,
+        color: colors[i % colors.length],
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.3,
+        life: 1,
+      });
+    }
+    const start = performance.now();
+    let popCount = 0;
+    (function animate(now) {
+      const elapsed = now - start;
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+      for (const p of particles) {
+        if (p.life <= 0) continue;
+        alive = true;
+        p.x += p.vx; p.y += p.vy;
+        p.vy += 0.3; p.rot += p.vr; p.life -= 0.012;
+        if (p.life > 0) {
+          ctx2d.save();
+          ctx2d.translate(p.x, p.y); ctx2d.rotate(p.rot);
+          ctx2d.globalAlpha = Math.max(p.life, 0);
+          ctx2d.fillStyle = p.color;
+          ctx2d.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx2d.restore();
+        }
+        if (popCount < 3 && Math.random() < 0.05) { SoundFX.play("pop"); popCount++; }
+      }
+      if (alive && elapsed < duration) requestAnimationFrame(animate);
+      else canvas.remove();
+    })(start);
+  }
+
+  /* ═══════════════════ COUNT-UP ANIMATION ═══════════════════ */
+  function countUp(el, target, duration = 1200) {
+    const start = performance.now();
+    (function tick(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + "%";
+      if (p < 1) requestAnimationFrame(tick);
+    })(start);
+  }
+
+  /* ═══════════════════ SCORE CARD (canvas, 1080×1080) ═══════════════════ */
+  function getRank(pct) {
+    if (pct >= 90) return { key: "rank_5", num: 5 };
+    if (pct >= 75) return { key: "rank_4", num: 4 };
+    if (pct >= 60) return { key: "rank_3", num: 3 };
+    if (pct >= 40) return { key: "rank_2", num: 2 };
+    return { key: "rank_1", num: 1 };
+  }
+
+  function renderScoreCard(canvas, alias, pct) {
+    const W = 1080, H = 1080;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const rank = getRank(pct);
+    const rankText = T(rank.key);
+    const dateStr = new Date().toLocaleDateString(S.lang === "th" ? "th-TH" : "en-US",
+      { year: "numeric", month: "short", day: "numeric" });
+
+    // background: dark gradient
+    const bgGrad = ctx.createRadialGradient(W / 2, -H * 0.1, 100, W / 2, H, H);
+    bgGrad.addColorStop(0, "#1a2836"); bgGrad.addColorStop(0.5, "#0d1420"); bgGrad.addColorStop(1, "#0a0e14");
+    ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+
+    // subtle border
+    ctx.strokeStyle = "rgba(245,166,35,0.3)"; ctx.lineWidth = 3;
+    ctx.strokeRect(30, 30, W - 60, H - 60);
+    // corner accents
+    ctx.strokeStyle = "rgba(245,166,35,0.6)"; ctx.lineWidth = 5;
+    const cs = 50;
+    [[40, 40, 1, 1], [W - 40, 40, -1, 1], [40, H - 40, 1, -1], [W - 40, H - 40, -1, -1]].forEach(([x, y, dx, dy]) => {
+      ctx.beginPath(); ctx.moveTo(x + dx * cs, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * cs); ctx.stroke();
+    });
+
+    // scanlines
+    ctx.fillStyle = "rgba(0,0,0,0.04)";
+    for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2);
+
+    // header
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f5a623";
+    ctx.font = "700 36px 'Cascadia Code', Consolas, monospace";
+    ctx.fillText("🔒 CLASSIFIED — CASE REPORT", W / 2, 120);
+
+    // detective emoji
+    ctx.font = "100px serif";
+    ctx.fillText("🕵️", W / 2, 260);
+
+    // title
+    ctx.fillStyle = "#c8d6e5";
+    ctx.font = "700 52px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(T("title"), W / 2, 340);
+
+    // divider
+    ctx.strokeStyle = "rgba(245,166,35,0.4)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 200, 370); ctx.lineTo(W / 2 + 200, 370); ctx.stroke();
+
+    // codename
+    ctx.fillStyle = "#5a6a7a";
+    ctx.font = "400 28px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(T("alias_h"), W / 2, 430);
+    ctx.fillStyle = "#c8d6e5";
+    ctx.font = "700 72px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(alias, W / 2, 510);
+
+    // score
+    ctx.fillStyle = "#5a6a7a";
+    ctx.font = "400 28px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(T("score_line"), W / 2, 590);
+    ctx.fillStyle = "#f5c542";
+    ctx.font = "800 180px 'Cascadia Code', Consolas, monospace";
+    ctx.shadowColor = "rgba(245,197,66,0.4)"; ctx.shadowBlur = 40;
+    ctx.fillText(pct + "%", W / 2, 760);
+    ctx.shadowBlur = 0;
+
+    // rank
+    ctx.fillStyle = "#f5a623";
+    ctx.font = "700 42px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    const rankStars = "★".repeat(rank.num) + "☆".repeat(5 - rank.num);
+    ctx.fillText(rankStars, W / 2, 830);
+    ctx.fillStyle = "#c8d6e5";
+    ctx.font = "600 36px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(rankText, W / 2, 880);
+
+    // date
+    ctx.fillStyle = "#5a6a7a";
+    ctx.font = "400 24px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+    ctx.fillText(T("card_date") + ": " + dateStr, W / 2, 930);
+
+    // QR corner (bottom-right)
+    const qrSize = 130, qrX = W - qrSize - 50, qrY = H - qrSize - 50;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16);
+    const qrImg = new Image();
+    // draw QR async
+    const iconImg = new Image();
+    let loaded = 0;
+    const drawQR = () => {
+      ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+      ctx.fillStyle = "#5a6a7a";
+      ctx.font = "400 18px 'Segoe UI', 'Noto Sans Thai', sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(T("card_scan"), qrX - 15, qrY + qrSize / 2);
+      ctx.textAlign = "center";
+    };
+    qrImg.onload = () => { drawQR(); };
+    qrImg.src = ASSETS + "/qr.png";
+
+    // icon (top-left)
+    const iconSize = 70;
+    iconImg.onload = () => ctx.drawImage(iconImg, 50, 60, iconSize, iconSize);
+    iconImg.src = ASSETS + "/icon.png";
+
+    return canvas;
+  }
+
+  function shareScoreCard(canvas) {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "ai-detective-score.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: T("title"), text: T("score_sub").replace("{p}", "X") })
+          .catch(() => {});
+      } else {
+        // fallback: download
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "ai-detective-score.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+    }, "image/png");
+  }
+
+  function saveScoreCard(canvas) {
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = "ai-detective-score.png";
+    a.click();
+  }
+
+  /* ═══════════════════ SUSPECT HEADER ═══════════════════ */
+  function suspectHeader(n) {
+    return `<div class="suspect-header"><span class="dot"></span>${fmt(T("suspect_label"), { n })} — ${T("suspect_status")}</div>`;
+  }
+
+  /* ═══════════════════ PERSISTENCE LAYER ═══════════════════ */
   async function postJSON(url, body, attempts = 3) {
     for (let i = 1; i <= attempts; i++) {
       try {
-        const r = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (!r.ok) throw new Error("http " + r.status);
         return await r.json();
-      } catch (e) {
-        if (i === attempts) throw e;
-        await new Promise((res) => setTimeout(res, 700 * i));
-      }
+      } catch (e) { if (i === attempts) throw e; await new Promise(r => setTimeout(r, 700 * i)); }
     }
   }
   const outbox = () => { try { return JSON.parse(localStorage.getItem(outboxKey) || "[]"); } catch { return []; } };
   const outboxSave = (q) => localStorage.setItem(outboxKey, JSON.stringify(q.slice(-200)));
   async function flushOutbox() {
     const rest = [];
-    for (const item of outbox()) {
-      try { await postJSON(`${API}/trial.php`, item.body); } catch { rest.push(item); }
-    }
+    for (const item of outbox()) { try { await postJSON(`${API}/trial.php`, item.body); } catch { rest.push(item); } }
     outboxSave(rest);
   }
   async function saveTrial(payload) {
@@ -91,23 +378,28 @@
     catch { outboxSave([...outbox(), { body: payload }]); }
   }
 
-  /* ---------------- session context (resume support) ---------------- */
-  const saveCtx = () => localStorage.setItem(ctxKey, JSON.stringify({
-    sid: S.session, lang: S.lang, birth_year: S.birth_year, gender: S.gender, alias: S.alias }));
+  /* ═══════════════════ SESSION CONTEXT ═══════════════════ */
+  const saveCtx = () => localStorage.setItem(ctxKey, JSON.stringify({ sid: S.session, lang: S.lang, birth_year: S.birth_year, gender: S.gender, alias: S.alias }));
   const loadCtx = () => { try { return JSON.parse(localStorage.getItem(ctxKey) || "null"); } catch { return null; } };
   const clearCtx = () => localStorage.removeItem(ctxKey);
 
-  /* ---------------- helpers ---------------- */
+  /* ═══════════════════ BACKGROUND PRELOADER ═══════════════════ */
+  function startBgPreload(plan) {
+    const files = [
+      ...plan.practice.flatMap(p => p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file]),
+      ...plan.round1.flatMap(t => [t.ai.file, t.real.file]),
+      ...plan.round2.map(t => t.file),
+    ].map(img);
+    S.bgLoad = Promise.all(files.map(src => new Promise(res => {
+      const im = new Image(); im.onload = im.onerror = () => res(); im.src = src;
+    })));
+  }
+
+  /* ═══════════════════ HELPERS ═══════════════════ */
   const img = (f) => `${ASSETS}/${f}`;
   const rtTag = {
     get() { return (document.cookie.match(/aidtect_rt=(\w+)/) || [])[1] || ""; },
-    ensure() {
-      if (!this.get()) {
-        const v = Math.random().toString(36).slice(2, 10);
-        document.cookie = `aidtect_rt=${v};max-age=7776000;path=/;SameSite=Lax`;
-      }
-      return this.get();
-    },
+    ensure() { if (!this.get()) { const v = Math.random().toString(36).slice(2, 10); document.cookie = `aidtect_rt=${v};max-age=7776000;path=/;SameSite=Lax`; } return this.get(); },
   };
   const scrollTop = () => window.scrollTo({ top: 0 });
   const trialMode = (on) => document.body.classList.toggle("trial-mode", on);
@@ -116,12 +408,12 @@
     if (document.getElementById("quit-btn")) return;
     const b = document.createElement("button");
     b.id = "quit-btn"; b.textContent = T("quit_btn");
-    b.onclick = () => { S.quitRequest = true; S.jp?.finishTrial({ quit_interrupt: true }); };
+    b.onclick = () => { S.quitRequest = true; SoundFX.play("stamp"); S.jp?.finishTrial({ quit_interrupt: true }); };
     document.body.appendChild(b);
   };
   const hideQuit = () => { document.getElementById("quit-btn")?.remove(); trialMode(false); };
 
-  async function quitFlow() {           // quit path: consent + short debrief only
+  async function quitFlow() {
     hideQuit(); await flushOutbox(); clearCtx();
     gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><div class="case-tag">${T("title")}</div>
       <h2>${T("quit_debrief")}</h2><p>${T("consent_q")}</p><p class="hint">${T("consent_what")}</p>
@@ -131,31 +423,28 @@
       try {
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: v });
         await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "quit" });
-      } catch { /* best effort; trials already saved */ }
+      } catch {}
       gameRoot.innerHTML = `<div class="jspsych-content"><div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p>
-        <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
-           <a class="plain" href="contact.html?lang=${S.lang}">${T("prize_link")}</a></p></div></div>`;
+        <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a></p></div></div>`;
     };
     document.getElementById("c-yes").onclick = () => send(1);
     document.getElementById("c-no").onclick = () => send(0);
   }
 
-  /* ================= STARTUP: resume check ================= */
+  /* ═══════════════════ STARTUP ═══════════════════ */
   async function startup() {
     await flushOutbox();
+    setupMuteToggle();
     const ctx = loadCtx();
     if (!ctx || !ctx.sid) return stage1();
     let st = null;
-    try {
-      st = await (await fetch(`${API}/state.php?session_id=${ctx.sid}`)).json();
-    } catch { st = null; }
+    try { st = await (await fetch(`${API}/state.php?session_id=${ctx.sid}`)).json(); } catch { st = null; }
     if (!st || !st.ok) { clearCtx(); return stage1(); }
     S.lang = ctx.lang || "en"; window.GAME_LANG = S.lang;
-    S.session = ctx.sid; S.birth_year = ctx.birth_year; S.gender = ctx.gender || "";
-    S.alias = ctx.alias || "";
+    S.session = ctx.sid; S.birth_year = ctx.birth_year; S.gender = ctx.gender || ""; S.alias = ctx.alias || "";
     if (st.completed) return playedScreen();
     S.plan = st.plan;
-    startBgPreload(S.plan);                 // resume: images may differ per progress, load all
+    startBgPreload(S.plan);
     resumeScreen(st.saved);
   }
 
@@ -168,8 +457,7 @@
   function playedScreen() {
     const root = fullScreenCard(`<div class="card"><div class="case-tag">${T("title")}</div>
       <h2>${T("played_h")}</h2><p>${T("played_sub")}</p>
-      <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
-         <a class="plain" href="contact.html?lang=${S.lang}">${T("prize_link")}</a></p>
+      <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a></p>
       <button class="jspsych-btn jspsych-btn--secondary" id="again">${T("play_again")}</button></div>`);
     root.querySelector("#again").onclick = () => { clearCtx(); location.reload(); };
   }
@@ -183,21 +471,23 @@
     root.querySelector("#fresh").onclick = () => { clearCtx(); location.reload(); };
   }
 
-  /* ================= STAGE 1 (fresh player) ================= */
+  /* ═══════════════════ STAGE 1 (signup) ═══════════════════ */
   function stage1() {
     const jsPsych = initFn();
     S.jp = jsPsych;
     const langTrial = {
       type: jsPsychHtmlButtonResponse,
-      stimulus: `<h1>🕵️</h1><h2>${STRINGS.en.lang_pick}</h2><h2>${STRINGS.th.lang_pick}</h2>`,
+      stimulus: `<h1 style="font-size:3rem">🕵️</h1><h2>${STRINGS.en.lang_pick}</h2><h2>${STRINGS.th.lang_pick}</h2>`,
       choices: ["English", "ไทย"],
       on_finish: (d) => { S.lang = d.response === 0 ? "en" : "th"; window.GAME_LANG = S.lang; },
     };
     const intro = {
       type: jsPsychHtmlButtonResponse,
       stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <div class="classified-stamp">TOP SECRET</div>
         <h2>${T("intro_h")}</h2><p>${T("intro_p")}</p><p>${T("intro_p2")}</p></div>`,
       choices: [() => T("start")],
+      on_load: () => { scrollTop(); SoundFX.play("typewriter"); },
     };
     const years = [];
     for (let y = 2012; y >= 1900; y--) years.push(`<option value="${y}">${S.lang === "th" ? (y + 543) + " (ค.ศ. " + y + ")" : y}</option>`);
@@ -231,7 +521,7 @@
           }, 400);
         });
       },
-      on_finish: (d) => {                       // SYNC — bootstrap happens on prepare screen
+      on_finish: (d) => {
         S.birth_year = Number(d.response.yob);
         S.gender = d.response.gender || "";
         S.alias = (d.response.alias || "").trim();
@@ -240,21 +530,18 @@
     jsPsych.run([langTrial, intro, demographics]).then(() => { if (!S.quitRequest) prepareScreen(); });
   }
 
-  /* ---- prepare screen: visible bootstrap with retry ---- */
   async function prepareScreen() {
     const render = (html) => { gameRoot.innerHTML = `<div class="jspsych-content">${html}</div>`; scrollTop(); };
     render(`<div class="card"><h2>${T("loading")}</h2><p class="hint">${T("prep_sub")}</p></div>`);
     try {
       const res = await postJSON(`${API}/session.php`, {
         lang: S.lang, birth_year: S.birth_year, gender: S.gender, alias: S.alias,
-        device: navigator.userAgent.slice(0, 250),
-        screen: `${screen.width}x${screen.height}`,
+        device: navigator.userAgent.slice(0, 250), screen: `${screen.width}x${screen.height}`,
         repeat_tag: rtTag.ensure(),
       });
       if (res && res.ok) {
         S.session = res.session_id; S.plan = res.plan;
-        startBgPreload(S.plan);             // download silently during briefing + training
-        saveCtx();
+        startBgPreload(S.plan); saveCtx();
         stage2({ practice: [], r1: [], r2: [] });
         return;
       }
@@ -268,12 +555,9 @@
     }
   }
 
-  /* ---- race-safe alias rename (server rejected the name at bootstrap) ---- */
   function renameScreen(render) {
-    render(`<div class="card"><h2>${T("alias_h")}</h2>
-      <p>${T("alias_taken")}</p>
-      <p><label>${T("alias_label")}<br>
-      <input type="text" id="rename" maxlength="16" value="${S.alias}"></label></p>
+    render(`<div class="card"><h2>${T("alias_h")}</h2><p>${T("alias_taken")}</p>
+      <p><label>${T("alias_label")}<br><input type="text" id="rename" maxlength="16" value="${S.alias}"></label></p>
       <p class="form-error" id="rename-status"></p>
       <button class="jspsych-btn" id="rename-go">${T("continue")}</button></div>`);
     const input = document.getElementById("rename");
@@ -286,23 +570,20 @@
       try {
         const r = await (await fetch(`${API}/check-alias.php?alias=${encodeURIComponent(v)}`, { cache: "no-store" })).json();
         if (!r.available) { status.textContent = T("alias_taken"); return; }
-      } catch { /* let the server decide */ }
-      S.alias = v;
-      prepareScreen();
+      } catch {}
+      S.alias = v; prepareScreen();
     };
   }
 
-  /* ================= STAGE 2 (game; resumable) ================= */
+  /* ═══════════════════ STAGE 2 (game) ═══════════════════ */
   function stage2(saved) {
-    const done = {
-      practice: new Set(saved.practice || []),
-      r1: new Set(saved.r1 || []),
-      r2: new Set(saved.r2 || []),
-    };
+    const done = { practice: new Set(saved.practice || []), r1: new Set(saved.r1 || []), r2: new Set(saved.r2 || []) };
     const jsPsych = initFn();
     S.jp = jsPsych;
     const timeline = [];
     const plan = S.plan;
+    const GAP = 500; // post-trial gap for stamp display
+
     const quitConfirmNode = () => ({
       timeline: [{
         type: jsPsychHtmlButtonResponse,
@@ -316,16 +597,18 @@
       conditional_function: () => S.quitRequest === true,
     });
 
-    // ---- training (skippable on resume) ----
+    // ── training ──
     if (done.practice.size < 2) {
       timeline.push({
         type: jsPsychHtmlButtonResponse,
-        stimulus: () => `<div class="card"><h2>${T("brief_h")}</h2><p>${T("brief_p")}</p></div>`,
+        stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+          <div class="classified-stamp">TRAINING</div>
+          <h2>${T("brief_h")}</h2><p>${T("brief_p")}</p></div>`,
         choices: [() => T("practice_go")],
-        on_load: scrollTop,
+        on_load: () => { scrollTop(); SoundFX.play("typewriter"); },
       });
-      const pPair = plan.practice.find((x) => x.pair).pair;
-      const pSingle = plan.practice.find((x) => x.single).single;
+      const pPair = plan.practice.find(x => x.pair).pair;
+      const pSingle = plan.practice.find(x => x.single).single;
       if (!done.practice.has(1)) timeline.push({
         type: jsPsychHtmlButtonResponse,
         stimulus: () => `<div class="q-line">${T("q_which")}</div>`,
@@ -334,10 +617,12 @@
         on_load: () => { trialMode(true); scrollTop(); },
         on_finish: (d) => {
           trialMode(false);
-          const chosen = pPair.ai_side === "left"
-            ? (d.response === 0 ? pPair.ai.id : pPair.real.id) : (d.response === 0 ? pPair.real.id : pPair.ai.id);
+          SoundFX.play("shutter");
+          stampOverlay(d.response === 0 ? (pPair.ai_side === "left" ? "ai" : "real") : (pPair.ai_side === "left" ? "real" : "ai"));
+          const chosen = pPair.ai_side === "left" ? (d.response === 0 ? pPair.ai.id : pPair.real.id) : (d.response === 0 ? pPair.real.id : pPair.ai.id);
           saveTrial({ session_id: S.session, round: "practice", trial_index: 1, image_id: chosen, rt_ms: Math.round(d.rt) });
         },
+        post_trial_gap: GAP,
       });
       if (!done.practice.has(2)) timeline.push({
         type: jsPsychHtmlButtonResponse,
@@ -346,100 +631,153 @@
         on_load: () => { trialMode(true); scrollTop(); },
         on_finish: (d) => {
           trialMode(false);
+          SoundFX.play("shutter");
+          stampOverlay(d.response === 0 ? "ai" : "real");
           saveTrial({ session_id: S.session, round: "practice", trial_index: 2, image_id: pSingle.id,
                       response: d.response === 0 ? 1 : 0, rt_ms: Math.round(d.rt) });
         },
+        post_trial_gap: GAP,
       });
     }
-    // ---- Investigation 1 gateway (fresh start of round) ----
+
+    // ── Investigation 1 intro (animated) ──
     if (done.r1.size === 0) timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><h2>${T("practice_done_h")}</h2><p>${T("practice_done_p")}</p></div>`,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <div class="classified-stamp">⚠ INTERCEPTED</div>
+        <h2>${T("r1_intro_h")}</h2><p class="typewriter">${T("r1_intro_p")}</p>
+        <p class="hint">${T("practice_done_p")}</p></div>`,
+      choices: [() => T("r1_go")],
+      on_load: () => { scrollTop(); SoundFX.play("whoosh"); setTimeout(() => SoundFX.play("typewriter"), 300); },
+    });
+    if (done.r1.size > 0 && done.r1.size < 12 && done.practice.size === 2) timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <div class="classified-stamp">⚠ INTERCEPTED</div>
+        <h2>${T("r1_intro_h")}</h2><p>${T("r1_intro_p")}</p>
+        <p class="hint">${T("practice_done_p")}</p></div>`,
       choices: [() => T("r1_go")],
       on_load: scrollTop,
     });
 
-    // ---- preload gate: safety net only — background preloader (started at
-    // bootstrap) has usually cached everything during briefing/training ----
+    // ── preload gate ──
     const files = [
-      ...plan.practice.flatMap((p) => (p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file])),
-      ...plan.round1.flatMap((t) => [t.ai.file, t.real.file]),
-      ...plan.round2.map((t) => t.file),
+      ...plan.practice.flatMap(p => p.pair ? [p.pair.ai.file, p.pair.real.file] : [p.single.file]),
+      ...plan.round1.flatMap(t => [t.ai.file, t.real.file]),
+      ...plan.round2.map(t => t.file),
     ].map(img);
     if (S.bgLoad) S.bgLoad.then(() => { S.bgDone = true; });
     timeline.push({
       timeline: [{
-        type: jsPsychPreload,
-        images: files,
-        show_progress_bar: true,
+        type: jsPsychPreload, images: files, show_progress_bar: true,
         message: () => `<div class="card"><h2>${T("loading")}</h2><p class="hint">${fmt(T("loading_sub"), { n: files.length })}</p></div>`,
         error_message: () => `<p>${T("save_retry")}</p>`,
       }],
-      conditional_function: () => !S.bgDone,   // skip entirely if background load finished
+      conditional_function: () => !S.bgDone,
     });
 
-    // ---- Investigation 1: 12 × 2AFC ----
+    // ── Investigation 1: 12 × 2AFC ──
     plan.round1.forEach((t, i) => {
       if (done.r1.has(i + 1)) return;
       timeline.push({
         type: jsPsychHtmlButtonResponse,
-        stimulus: () => `<div class="q-line">${T("q_which")}</div>
+        stimulus: () => `${suspectHeader(i + 1)}
+                         <div class="q-line">${T("q_which")}</div>
                          <div class="progress-line">${fmt(T("r1_label"), { n: i + 1 })}</div>`,
         choices: t.ai_side === "left" ? [img(t.ai.file), img(t.real.file)] : [img(t.real.file), img(t.ai.file)],
         button_html: (src) => `<button class="pair-btn"><img src="${src}" alt="face"></button>`,
         on_load: showQuit,
         on_finish: (d) => {
           hideQuit();
-          if (S.quitRequest) return;                     // interrupted by quit — do not save
+          if (S.quitRequest) return;
+          SoundFX.play("shutter");
+          stampOverlay(d.response === 0 ? (t.ai_side === "left" ? "ai" : "real") : (t.ai_side === "left" ? "real" : "ai"));
           const chosen = t.ai_side === "left"
             ? (d.response === 0 ? t.ai.id : t.real.id) : (d.response === 0 ? t.real.id : t.ai.id);
           saveTrial({ session_id: S.session, round: "1", trial_index: i + 1, image_id: chosen, rt_ms: Math.round(d.rt) });
         },
+        post_trial_gap: GAP,
       });
       timeline.push(quitConfirmNode());
     });
 
-    // ---- Investigation 2: 24 × AI-or-real ----
+    // ── Investigation 2 intro ──
     if (done.r2.size === 0) timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><h2>${T("r2_h")}</h2><p>${T("r2_p")}</p></div>`,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <div class="classified-stamp">🚨 ALERT</div>
+        <h2>${T("r2_intro_h")}</h2><p class="typewriter">${T("r2_intro_p")}</p>
+        <p class="hint">${T("r2_p")}</p></div>`,
       choices: [() => T("r2_go")],
-      on_load: scrollTop,
+      on_load: () => { scrollTop(); SoundFX.play("whoosh"); setTimeout(() => SoundFX.play("typewriter"), 300); },
     });
+
+    // ── Investigation 2: 24 × AI/Real ──
     plan.round2.forEach((t, i) => {
       if (done.r2.has(i + 1)) return;
       timeline.push({
         type: jsPsychHtmlButtonResponse,
-        stimulus: () => `<div class="q-line">${T("q_is_ai")}</div><img class="stim-single" src="${img(t.file)}">
+        stimulus: () => `${suspectHeader(i + 1)}
+                         <div class="q-line">${T("q_is_ai")}</div>
+                         <img class="stim-single" src="${img(t.file)}">
                          <div class="progress-line">${fmt(T("r2_label"), { n: i + 1 })}</div>`,
         choices: [() => T("yes"), () => T("no")],
         on_load: showQuit,
         on_finish: (d) => {
           hideQuit();
           if (S.quitRequest) return;
+          SoundFX.play("shutter");
+          stampOverlay(d.response === 0 ? "ai" : "real");
           saveTrial({ session_id: S.session, round: "2", trial_index: i + 1, image_id: t.id,
                       response: d.response === 0 ? 1 : 0, rt_ms: Math.round(d.rt) });
         },
+        post_trial_gap: GAP,
       });
       timeline.push(quitConfirmNode());
     });
 
-    // ---- score (authoritative, from server) ----
+    // ── SCORE + CARD (canvas) ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div><h2>${T("score_h")}</h2>
-        <div class="big-score" id="score">…</div><div>${T("score_line")}</div><p class="hint" id="score-sub"></p></div>`,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <div class="classified-stamp">CASE CLOSED</div>
+        <h2>${T("score_h")}</h2>
+        <div class="big-score" id="score">…</div>
+        <div>${T("score_line")}</div>
+        <p class="hint" id="score-sub"></p>
+        <div id="score-card-wrap"><canvas id="score-card-canvas"></canvas></div>
+        <div class="card-actions">
+          <button class="jspsych-btn" id="card-save" style="display:none">${T("card_save")}</button>
+          <button class="jspsych-btn jspsych-btn--secondary" id="card-share" style="display:none">${T("card_share")}</button>
+        </div></div>`,
       choices: [() => T("continue")],
       on_load: async () => {
         scrollTop();
+        SoundFX.play("fanfare");
         const sc = await (await fetch(`${API}/score.php?session_id=${S.session}`)).json();
         const pct = sc && sc.total ? Math.round((100 * sc.correct) / sc.total) : 0;
-        document.getElementById("score").textContent = pct + "%";
+        const rank = getRank(pct);
+        // count-up
+        const scoreEl = document.getElementById("score");
+        countUp(scoreEl, pct, 1400);
+        setTimeout(() => {
+          confettiBurst();
+        }, 1400);
         document.getElementById("score-sub").textContent = fmt(T("score_sub"), { p: pct });
+        // render card
+        const canvas = document.getElementById("score-card-canvas");
+        if (canvas) {
+          renderScoreCard(canvas, S.alias, pct);
+          const saveBtn = document.getElementById("card-save");
+          const shareBtn = document.getElementById("card-share");
+          saveBtn.style.display = ""; shareBtn.style.display = "";
+          saveBtn.onclick = () => saveScoreCard(canvas);
+          shareBtn.onclick = () => shareScoreCard(canvas);
+        }
       },
     });
 
-    // ---- consent (post-game) ----
+    // ── consent ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: () => `<div class="card"><h2>${T("consent_h")}</h2><p>${T("consent_q")}</p>
@@ -448,12 +786,11 @@
       on_load: scrollTop,
       on_finish: (d) => {
         S.consentVal = d.response === 0 ? 1 : 0;
-        postJSON(`${API}/finalize.php`,
-          { session_id: S.session, action: "consent", consent: S.consentVal }).catch(() => {});
+        postJSON(`${API}/finalize.php`, { session_id: S.session, action: "consent", consent: S.consentVal }).catch(() => {});
       },
     });
 
-    // ---- familiarity survey v2: 8 questions, conditional follow-ups (Q2/Q4/Q7) ----
+    // ── survey v2 ──
     const opts = (arr) => [`<option value="">${T("select")}</option>`, ...arr.map((l, i) => `<option value="${i}">${l}</option>`)].join("");
     const qs = (id, parent, text, arr) =>
       `<p class="svq" data-q="${id}"${parent ? ` data-parent="${parent}" style="display:none"` : ""}>
@@ -469,28 +806,24 @@
         ${qs("q8", "", T("q8"), T("opt_fam5"))}</div>`,
       on_load: () => {
         scrollTop();
-        // show/hide conditional follow-ups; keep them required only when visible
         document.querySelectorAll("select[name^=q]").forEach((sel) => {
           sel.addEventListener("change", () => {
-            const isYes = sel.value === "0";              // option 0 = Yes/เคย/ใช่
+            const isYes = sel.value === "0";
             document.querySelectorAll(`.svq[data-parent="${sel.name}"]`).forEach((row) => {
-              const show = isYes;
-              row.style.display = show ? "" : "none";
-              row.querySelector("select").required = show;
-              if (!show) row.querySelector("select").value = "";
+              row.style.display = isYes ? "" : "none";
+              row.querySelector("select").required = isYes;
+              if (!isYes) row.querySelector("select").value = "";
             });
           });
         });
       },
       on_finish: async (d) => {
         const val = (id) => (d.response[id] === "" || d.response[id] === undefined ? null : Number(d.response[id]));
-        const yn = (v) => (v === null ? null : (v === 0 ? 1 : 0));       // Yes(idx0)->1, No(idx1)->0
-        const fr = (v) => v;                                              // 0..4 as-is
-        const fam = (v) => (v === null ? null : v + 1);                   // 1..5
-        const f = {
-          f1: yn(val("q1")), f2: fr(val("q2")), f3: yn(val("q3")), f4: fr(val("q4")),
-          f5: yn(val("q5")), f6: yn(val("q6")), f7: fr(val("q7")), f8: fam(val("q8")),
-        };
+        const yn = (v) => (v === null ? null : (v === 0 ? 1 : 0));
+        const fr = (v) => v;
+        const fam = (v) => (v === null ? null : v + 1);
+        const f = { f1: yn(val("q1")), f2: fr(val("q2")), f3: yn(val("q3")), f4: fr(val("q4")),
+                    f5: yn(val("q5")), f6: yn(val("q6")), f7: fr(val("q7")), f8: fam(val("q8")) };
         try {
           await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "survey", ...f });
           await postJSON(`${API}/finalize.php`, { session_id: S.session, action: "finish" });
@@ -500,11 +833,12 @@
       },
     });
 
-    // ---- prize draw offer (everyone, consent-independent): Join / Skip ----
+    // ── prize ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div><h2>${T("prize_h")}</h2>
-        <p>${T("prize_sub")}</p><p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p></div>`,
+      stimulus: () => `<div class="card"><div class="case-tag">${T("title")}</div>
+        <h2>${T("prize_h")}</h2><p>${T("prize_sub")}</p>
+        <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p></div>`,
       choices: [() => T("prize_join"), () => T("prize_skip")],
       on_load: scrollTop,
       on_finish: (d) => { S.prizeJoin = d.response === 0; },
@@ -517,15 +851,13 @@
           <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p>
           <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p></div>`,
         on_finish: async (d) => {
-          try {
-            await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() });
-          } catch {}
+          try { await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() }); } catch {}
         },
       }],
       conditional_function: () => S.prizeJoin === true,
     });
 
-    // ---- debrief ----
+    // ── debrief ──
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: () => `<div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p><p>${T("debrief_2")}</p>

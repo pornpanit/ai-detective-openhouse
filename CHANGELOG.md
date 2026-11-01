@@ -4,6 +4,68 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-10-31 — Session 9: immersive detective edition (stamps, sounds, confetti, score card, live alerts)
+
+### Visual: dark classified-terminal theme
+- **Full CSS overhaul**: near-black background with amber/gold phosphor accents,
+  subtle scanline overlay, CRT vignette, monospace terminal text for labels,
+  "TOP SECRET" / "CLASSIFIED" stamps on intro cards, gold accent line on cards.
+- **Selection stamp**: when a player taps a face or answers, a rubber-stamp
+  graphic ("AI" or "REAL" — the player's CHOICE, never correctness) slams
+  over the screen with rotation + scale animation + thunk sound.
+  RT-safe: fires in `on_finish` via `post_trial_gap: 500ms`.
+- **Suspect headers**: each trial shows `📂 SUSPECT #07 — IDENTITY UNVERIFIED`
+  in monospace above the stimulus, with a pulsing red dot.
+- **Round-intro reveals**: "⚠ INTERCEPTED" / "🚨 ALERT" classified stamps +
+  typewriter text animation on the narrative briefings.
+- **Score count-up**: 0→X% with easing + gold glow → confetti burst (80
+  particles, canvas, zero dependencies).
+
+### Audio: WebAudio synthesized sounds (zero files)
+- Camera **shutter click** on every face selection (post-response, RT-safe)
+- **Typewriter** clicks during briefing text reveals
+- **Whoosh** on round transitions
+- **Stamp thunk** when the selection stamp lands
+- **Fanfare** (major arpeggio) on score reveal
+- **Confetti pops** during the celebration
+- **Mute toggle** 🔊/🔇 — bottom-left corner, persisted in localStorage,
+  gain 0.15 (subtle). All sounds fire post-response or between rounds —
+  **never at stimulus onset**.
+
+### Shareable score card (canvas)
+- 1080×1080 canvas: dark terminal background, corner brackets, scanlines,
+  detective emoji, codename, count-up percentage, rank stars + title
+  (Chief Detective / Master / First Class / Rookie / Trainee), date,
+  scan-to-play QR corner. Bilingual (TH/EN).
+- **Save as picture** — canvas→PNG download (works everywhere)
+- **Share** — Web Share API with PNG file (native iOS/Android sheet);
+  falls back to save on desktop.
+
+### Narrative re-write
+- New briefing: "A rogue AI syndicate has infiltrated the facility's
+  identity database with synthetic faces…"
+- Round 1: "INTERCEPTED: 12 paired identity passes…"
+- Round 2: "ALERT: 24 unverified identities detected…"
+- Prize screen: "📋 SUBMIT EVIDENCE FOR REWARD" — framed as submitting
+  a detective bounty.
+- All debrief/disclosure requirements unchanged.
+
+### LIVE board enhancements
+- **New-#1 alert banner**: animated slide-down "🚨 NEW TOP DETECTIVE:
+  [codename] cleared X%!" when the champion changes between polls
+- **Booth victory fanfare**: opt-in 🔊 toggle on the board (plays a
+  dramatic arpeggio when a new #1 appears)
+- Rank-change pulse on rows
+
+### Verification
+- 21 static checks pass (including new RT-safety check: stamps in
+  on_finish only, never on_load)
+- Production E2E green (48 images serve, score card + stamps + sounds
+  confirmed in served assets)
+- `check_frontend.py` updated for the new code structure
+
+---
+
 ## 2026-10-31 — Session 8: full-dataset pipeline, pool v3, half-day unique, admin v5, test-flag
 
 ### Cleanup (disk headroom)
