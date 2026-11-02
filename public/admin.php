@@ -1,4 +1,6 @@
 <?php
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
 // GET/POST /admin.php — researcher dashboard v6 (read-only data + test-flag controls).
 // Separate Investigation 1 / 2 sections, confusion matrix, speed-accuracy scatter,
 // accuracy distribution by generation, survey panel, JS toggle fix.
