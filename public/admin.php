@@ -167,7 +167,7 @@ $surveyQs = [
 ];
 $surveyData = [];
 for ($q = 1; $q <= 8; $q++) {
-    $rows = $one("SELECT familiarity_$q as val, COUNT(*) n FROM sessions
+    $rows = $one("SELECT familiarity_$qNum as val, COUNT(*) n FROM sessions
         WHERE consent=1 AND is_test=0 AND familiarity_$q IS NOT NULL GROUP BY familiarity_$q ORDER BY familiarity_$q");
     $surveyData[$q] = $rows;
 }
@@ -507,10 +507,10 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
 <div class="grid">
 <?php foreach ($surveyQs as $qNum=>$qInfo): ?>
   <?php
-  $corr = $one("SELECT s.familiarity_$q as val, ROUND(100*AVG(t.correct),1) acc, COUNT(DISTINCT s.session_id) n
+  $corr = $one("SELECT s.familiarity_$qNum as val, ROUND(100*AVG(t.correct),1) acc, COUNT(DISTINCT s.session_id) n
       FROM sessions s JOIN trials t ON t.session_id=s.session_id AND t.round IN ('1','2')
-      WHERE s.consent=1 AND s.is_test=0 AND s.familiarity_$q IS NOT NULL
-      GROUP BY s.familiarity_$q ORDER BY s.familiarity_$q");
+      WHERE s.consent=1 AND s.is_test=0 AND s.familiarity_$qNum IS NOT NULL
+      GROUP BY s.familiarity_$qNum ORDER BY s.familiarity_$qNum");
   ?>
   <?php if ($corr): ?>
   <div class="card">
