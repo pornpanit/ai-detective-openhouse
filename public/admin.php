@@ -32,6 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['api'] ?? '') === '1') {
     $act = $in['action'] ?? '';
     if ($act === 'flag_all') {
         $db->exec("UPDATE sessions SET is_test = 1 WHERE is_test = 0");
+    } elseif ($act === 'show_all') {
+        $db->exec("UPDATE sessions SET is_test = 0 WHERE is_test = 1");
     } elseif ($act === 'toggle' && preg_match('/^[0-9a-f]{24}$/', $in['session_id'] ?? '')) {
         $st = $db->prepare("UPDATE sessions SET is_test = 1 - is_test WHERE session_id = ?");
         $st->execute([$in['session_id']]);
@@ -75,11 +77,18 @@ $funnel = [
 ];
 
 /* ═══ INVESTIGATION 1 (2AFC) ═══ */
-// AI faces spotted per type (gan/diffusion ONLY — "real" rows in R1 = wrong answers, excluded by design)
-$r1Spotted = $one("SELECT t.image_type, COUNT(*) n, ROUND(100*AVG(t.correct),1) pct
-    FROM trials t JOIN sessions s ON s.session_id=t.session_id
-    WHERE s.consent=1 AND s.is_test=0 AND t.round='1' AND t.image_type IN ('gan','diffusion')
-    GROUP BY t.image_type ORDER BY t.image_type");
+// AI faces spotted per type — FIXED: uses pair_image_id to identify AI type on wrong trials
+$r1Spotted = $one("SELECT
+    CASE
+        WHEN t.image_type IN ('gan','diffusion') THEN t.image_type
+        ELSE CASE ai_img.source WHEN 'sd15' THEN 'diffusion' ELSE ai_img.source END
+    END as ai_type,
+    COUNT(*) n, ROUND(100*SUM(t.correct)/COUNT(*),1) pct
+    FROM trials t
+    JOIN sessions s ON s.session_id = t.session_id
+    LEFT JOIN images ai_img ON ai_img.image_id = t.pair_image_id AND t.image_type = 'real'
+    WHERE s.consent=1 AND s.is_test=0 AND t.round='1'
+    GROUP BY ai_type ORDER BY ai_type");
 $r1RtHist = $one("SELECT
     SUM(t.rt_ms<1000) b1, SUM(t.rt_ms>=1000 AND t.rt_ms<2000) b2,
     SUM(t.rt_ms>=2000 AND t.rt_ms<3000) b3, SUM(t.rt_ms>=3000 AND t.rt_ms<5000) b4,
@@ -165,7 +174,9 @@ for ($q = 1; $q <= 8; $q++) {
 
 /* ═══ RECENT SESSIONS ═══ */
 $recent = $one("SELECT s.session_id, s.lang, s.cohort, s.alias, s.consent, s.completed, s.is_test,
-    s.created_at, COUNT(t.id) trials, COALESCE(SUM(t.correct),0) correct
+    s.created_at, s.finished_at,
+    ROUND(COALESCE(TIMESTAMPDIFF(SECOND, s.created_at, s.finished_at), 0) / 60, 1) as play_min,
+    COUNT(t.id) trials, COALESCE(SUM(t.correct),0) correct
     FROM sessions s LEFT JOIN trials t ON t.session_id=s.session_id AND t.round IN ('1','2')
     GROUP BY s.session_id ORDER BY s.created_at DESC LIMIT 20");
 
@@ -202,8 +213,8 @@ function pie(array $data): string {
 }
 header('Content-Type: text/html; charset=utf-8');
 
-// scatter plot bounds
-$scatterMaxRt = max(500, ...array_map(fn($r)=>(int)$r['rt'], $scatter));
+// scatter plot bounds (seconds)
+$scatterMaxRt = max(1, ...array_map(fn($r)=>round((int)$r['rt']/1000, 1), $scatter));
 $cohortColors = ['genx'=>'#a33b2e','millennial'=>'#3f7cac','genz'=>'#5f8f5e','other'=>'#7a6ba3'];
 ?>
 <!DOCTYPE html>
@@ -243,7 +254,7 @@ h2.sec .tag{font-size:.68rem;letter-spacing:0;text-transform:none;font-weight:40
 .bar{background:linear-gradient(90deg,var(--accent),#c98d4b);height:100%;border-radius:6px;min-width:3px}
 .bar-val{width:70px;font-size:.8rem;font-weight:700;flex:none;font-variant-numeric:tabular-nums}
 .pie-wrap{display:flex;align-items:center;gap:20px;justify-content:center;flex-wrap:wrap;min-height:150px}
-.pie{width:140px;height:140px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 30px var(--surface)}
+.pie{width:180px;height:180px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 38px var(--surface)}
 .lg-row{margin:4px 0;font-size:.85rem}
 .lg-dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:8px}
 .empty{color:var(--muted);font-size:.85rem;text-align:center;padding:34px 10px;border:1.5px dashed var(--line);border-radius:10px}
@@ -261,6 +272,11 @@ tr:hover td{background:#f7f1e3}
 .dl:hover{background:#f4e9d2}
 .mini{font:600 .7rem/1 sans-serif;padding:5px 10px;border-radius:8px;border:1.5px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
 .mini:hover{border-color:var(--accent);color:var(--accent)}
+.mini.hide-btn{color:var(--bad);border-color:var(--bad)}
+.mini.hide-btn:hover{background:rgba(163,59,46,.08)}
+.mini.show-btn{color:var(--good);border-color:var(--good)}
+.mini.show-btn:hover{background:rgba(78,141,91,.08)}
+.mini.done{color:var(--good);border-color:var(--good);pointer-events:none}
 /* scatter plot */
 .scatter{position:relative;height:280px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin:10px 0;overflow:hidden}
 .scatter-dot{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,50%);opacity:.75;cursor:pointer;transition:opacity .2s}
@@ -313,6 +329,7 @@ footer{margin-top:34px;color:var(--muted);font-size:.75rem;text-align:center}
   <div class="explain" style="margin:0">🧪 <b>Test sessions</b> hidden from board & exports — visible here only.</div>
   <div style="margin-top:10px">
     <button class="dl" onclick="apiAction('flag_all')">🧪 Hide all existing sessions</button>
+    <button class="dl" style="border-color:var(--good);color:var(--good)" onclick="apiAction('show_all')">👁 Show all hidden sessions</button>
     <a class="dl" href="live.html" target="_blank">📺 Open LIVE board</a>
   </div>
 </div>
@@ -398,13 +415,14 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
     <?php else: ?>
     <div class="scatter" id="scatter">
       <?php foreach ($scatter as $s): ?>
-        <?php $x = min(96, max(2, round(100*(int)$s['rt']/$scatterMaxRt)));
+        <?php $rtSec = round((int)$s['rt']/1000, 1);
+              $x = min(96, max(2, round(100*$rtSec/$scatterMaxRt)));
               $y = min(95, max(2, 100-(int)$s['acc']));
               $color = $cohortColors[$s['cohort']] ?? '#7a6ba3'; ?>
         <div class="scatter-dot" style="left:<?= $x ?>%;bottom:<?= 100-$y ?>%;background:<?= $color ?>"
-             title="<?= h($s['alias']) ?> · <?= h($s['cohort']) ?> · <?= h($s['acc']) ?>% · <?= h($s['rt']) ?>ms"></div>
+             title="<?= h($s['alias']) ?> · <?= h($s['cohort']) ?> · <?= h($s['acc']) ?>% · <?= $rtSec ?>s/trial"></div>
       <?php endforeach; ?>
-      <div class="scatter-axis" style="bottom:4px;left:50%">← faster &nbsp;&nbsp; Mean RT (ms) &nbsp;&nbsp; slower →</div>
+      <div class="scatter-axis" style="bottom:4px;left:50%">← faster &nbsp;&nbsp; Avg time per trial (seconds) &nbsp;&nbsp; slower →</div>
       <div class="scatter-axis" style="left:4px;top:50%;transform:rotate(-90deg) translateX(50%);transform-origin:left">↑ more accurate</div>
     </div>
     <div class="gbar-legend">
@@ -425,23 +443,19 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
     <?php if ($maxCount <= 1 && array_sum(array_map('array_sum',$accBins)) < 2): ?>
       <?= emptyState() ?>
     <?php else: ?>
-    <div style="display:flex;gap:16px;align-items:flex-end;height:100px;padding:0 10px">
-      <?php foreach ($binLabels as $bin): ?>
-      <div style="flex:1;text-align:center">
-        <div class="gbar-group">
-          <?php foreach ($genColors as $g=>$col): ?>
-          <div class="gbar" style="height:<?= max(2,round(70*($accBins[$g][$bin]??0)/$maxCount)) ?>px;background:<?= $col ?>">
-            <span><?= $accBins[$g][$bin] ?? 0 ?></span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+      <?php foreach ($genColors as $g=>$col): ?>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:<?= $col ?>;margin-bottom:6px;text-align:center"><?= ucfirst($g) ?></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;height:70px;justify-content:center">
+          <?php foreach ($binLabels as $bin): ?>
+          <div style="text-align:center">
+            <div style="width:32px;background:<?= $col ?>;border-radius:4px 4px 0 0;margin:0 auto;min-height:2px;height:<?= max(2,round(60*($accBins[$g][$bin]??0)/$maxCount)) ?>px;opacity:<?= ($accBins[$g][$bin]??0) > 0 ? 0.85 : 0.15 ?>"></div>
+            <div style="font-size:.62rem;color:var(--muted);margin-top:3px"><?= $bin ?><br><b><?= $accBins[$g][$bin] ?? 0 ?></b></div>
           </div>
           <?php endforeach; ?>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:4px"><?= $bin ?>%</div>
       </div>
-      <?php endforeach; ?>
-    </div>
-    <div class="gbar-legend">
-      <?php foreach ($genColors as $g=>$col): ?>
-        <span><span class="lg-dot" style="background:<?= $col ?>"></span><?= ucfirst($g) ?></span>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
@@ -449,7 +463,7 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
 </div>
 
 <!-- ═══ SURVEY ═══ -->
-<h2 class="sec">Background Survey <span class="tag">(consented participants)</span></h2>
+<h2 class="sec">Background Survey <span class="tag">(consented · <?php echo array_sum(array_map(fn($r)=>(int)$r['n'],$surveyData[1] ?? [])); ?> respondents)</span></h2>
 <div class="survey-grid">
   <?php foreach ($surveyQs as $qNum=>$qInfo): ?>
   <div class="survey-q">
@@ -467,7 +481,7 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
         echo "<span style='width:70px;text-align:right;color:var(--muted)'>{$optLabel}</span>";
         echo "<div style='flex:1;background:#ece6d6;border-radius:4px;height:14px;overflow:hidden'>";
         echo "<div style='width:{$pct}%;height:100%;background:var(--accent);border-radius:4px'></div></div>";
-        echo "<span style='width:45px;font-weight:700'>{$pct}%</span></div>";
+        echo "<span style='width:65px;font-weight:700'>{$r['n']} ({$pct}%)</span></div>";
       }
     }
     ?>
@@ -480,7 +494,7 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
 <div class="card">
 <?php if (!$recent): ?><?= emptyState() ?><?php else: ?>
 <div class="tbl-wrap"><table>
-<thead><tr><th>session</th><th>lang</th><th>codename</th><th>cohort</th><th>trials</th><th>correct</th><th>consent</th><th>done</th><th>test</th><th>created</th></tr></thead>
+<thead><tr><th>session</th><th>lang</th><th>codename</th><th>cohort</th><th>trials</th><th>correct</th><th>consent</th><th>done</th><th>test</th><th>time</th><th>created</th></tr></thead>
 <tbody>
 <?php foreach ($recent as $r): ?>
 <tr>
@@ -496,8 +510,9 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
   <td><?= $r['completed']==='1' ? '✓' : 'quit' ?></td>
   <td>
     <?php if ($r['is_test']==='1') echo '<span class="badge test">🧪</span> '; ?>
-    <button class="mini" onclick="toggleTest('<?= h($r['session_id']) ?>',this)"><?= $r['is_test']==='1'?'un-hide':'hide' ?></button>
+    <button class="mini <?= $r['is_test']==='1'?'show-btn':'hide-btn' ?>" onclick="toggleTest('<?= h($r['session_id']) ?>',this)"><?= $r['is_test']==='1'?'👁 show':'🧪 hide' ?></button>
   </td>
+  <td><?= h($r['play_min']) ?>m</td>
   <td><?= h($r['created_at']) ?></td>
 </tr>
 <?php endforeach; ?>
@@ -518,12 +533,13 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
 </div>
 
 <script>
-async function apiAction(action, sessionId) {
+async function apiAction(action, sessionId, btn) {
   const body = sessionId ? {action, session_id: sessionId} : {action};
+  if (btn) { btn.textContent = '✓'; btn.classList.add('done'); }
   try {
     await fetch('admin.php?api=1', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-    location.reload();
-  } catch(e) { alert('Action failed — please refresh'); }
+    setTimeout(() => { location.href = 'admin.php?_=' + Date.now(); }, 400);
+  } catch(e) { alert('Action failed — please refresh'); location.href = 'admin.php?_=' + Date.now(); }
 }
 async function toggleTest(sessionId, btn) {
   await apiAction('toggle', sessionId);

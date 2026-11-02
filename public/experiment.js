@@ -156,21 +156,14 @@
   }
 
   /* ═══════════════════ VISUAL STAMP ( Investigation 1: glow effect, Investigation 2: text stamp ) ═══════════════════ */
-  /* Investigation 1 + practice pair: golden border flash on selected face (no text = no ambiguity) */
+  /* Investigation 1 + practice pair: subtle scale-up on selected face (no layout shift) */
   function faceFlash(btnEl) {
     if (!btnEl) return;
-    btnEl.style.transition = "all .15s ease";
-    btnEl.style.borderColor = "#f5a623";
-    btnEl.style.boxShadow = "0 0 20px rgba(245,166,35,.6)";
-    btnEl.style.transform = "scale(.94)";
+    btnEl.style.transition = "transform .2s ease";
+    btnEl.style.transform = "scale(1.04)";
     setTimeout(() => {
-      btnEl.style.transform = "scale(1.02)";
-      setTimeout(() => {
-        btnEl.style.transform = "scale(1)";
-        btnEl.style.boxShadow = "";
-        btnEl.style.borderColor = "";
-      }, 120);
-    }, 100);
+      btnEl.style.transform = "scale(1)";
+    }, 350);
   }
 
   /* Investigation 2: text stamp (player's explicit choice — safe) */
