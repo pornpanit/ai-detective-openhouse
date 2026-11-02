@@ -124,10 +124,15 @@ $cm = $db->query("SELECT
     WHERE s.consent=1 AND s.is_test=0 AND t.round='2'")->fetch();
 
 /* ═══ PERFORMANCE ANALYSIS ═══ */
-// Speed-accuracy scatter (per participant)
-$scatter = $one("SELECT s.session_id, s.cohort, s.alias,
-    ROUND(100*AVG(t.correct),1) acc, ROUND(AVG(t.rt_ms)) rt
-    FROM sessions s JOIN trials t ON t.session_id=s.session_id AND t.round IN ('1','2')
+// Speed-accuracy scatter: SEPARATE R1 and R2 (per participant, RT in seconds)
+$scatterR1 = $one("SELECT s.session_id, s.cohort, s.alias,
+    ROUND(100*AVG(t.correct),1) acc, ROUND(AVG(t.rt_ms)/1000,1) rt_sec
+    FROM sessions s JOIN trials t ON t.session_id=s.session_id AND t.round='1'
+    WHERE s.consent=1 AND s.is_test=0 AND s.completed=1
+    GROUP BY s.session_id, s.cohort, s.alias");
+$scatterR2 = $one("SELECT s.session_id, s.cohort, s.alias,
+    ROUND(100*AVG(t.correct),1) acc, ROUND(AVG(t.rt_ms)/1000,1) rt_sec
+    FROM sessions s JOIN trials t ON t.session_id=s.session_id AND t.round='2'
     WHERE s.consent=1 AND s.is_test=0 AND s.completed=1
     GROUP BY s.session_id, s.cohort, s.alias");
 // Accuracy distribution by generation (bins)
@@ -210,7 +215,8 @@ function pie(array $data): string {
 header('Content-Type: text/html; charset=utf-8');
 
 // scatter plot bounds
-$scatterMaxRt = max(array_merge([500], array_map(fn($r)=>(int)$r['rt'], $scatter)));
+$scatterMaxRtR1 = max(array_merge([1], array_map(fn($r)=>(float)$r['rt_sec'], $scatterR1)));
+$scatterMaxRtR2 = max(array_merge([1], array_map(fn($r)=>(float)$r['rt_sec'], $scatterR2)));
 $cohortColors = ['genx'=>'#a33b2e','millennial'=>'#3f7cac','genz'=>'#5f8f5e','other'=>'#7a6ba3'];
 ?>
 <!DOCTYPE html>
@@ -412,20 +418,39 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
 <h2 class="sec">Performance Analysis</h2>
 <div class="grid">
   <div class="card" style="grid-column:1/-1">
-    <h3>Speed–Accuracy Tradeoff <span class="tag" style="font-size:.7rem;color:var(--muted)">(each dot = 1 participant)</span></h3>
-    <?php if (count($scatter) < 2): ?>
+    <h3>Speed–Accuracy Tradeoff <span class="tag" style="font-size:.7rem;color:var(--muted)">(each dot = 1 participant · seconds per trial)</span></h3>
+    <?php if (count($scatterR1) + count($scatterR2) < 2): ?>
       <?= emptyState() ?>
     <?php else: ?>
-    <div class="scatter" id="scatter">
-      <?php foreach ($scatter as $s): ?>
-        <?php $x = min(96, max(2, round(100*(int)$s['rt']/$scatterMaxRt)));
-              $y = min(95, max(2, 100-(int)$s['acc']));
-              $color = $cohortColors[$s['cohort']] ?? '#7a6ba3'; ?>
-        <div class="scatter-dot" style="left:<?= $x ?>%;bottom:<?= 100-$y ?>%;background:<?= $color ?>"
-             title="<?= h($s['alias']) ?> · <?= h($s['cohort']) ?> · <?= h($s['acc']) ?>% · <?= h($s['rt']) ?>ms"></div>
-      <?php endforeach; ?>
-      <div class="scatter-axis" style="bottom:4px;left:50%">← faster &nbsp;&nbsp; Mean RT (ms) &nbsp;&nbsp; slower →</div>
-      <div class="scatter-axis" style="left:4px;top:50%;transform:rotate(-90deg) translateX(50%);transform-origin:left">↑ more accurate</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:6px;text-align:center">Investigation 1</div>
+        <div class="scatter" style="height:240px">
+          <?php foreach ($scatterR1 as $s): ?>
+            <?php $x = min(96, max(2, round(100*(float)$s['rt_sec']/$scatterMaxRtR1)));
+                  $y = min(95, max(2, 100-(int)$s['acc']));
+                  $color = $cohortColors[$s['cohort']] ?? '#7a6ba3'; ?>
+            <div class="scatter-dot" style="left:<?= $x ?>%;bottom:<?= 100-$y ?>%;background:<?= $color ?>"
+                 title="<?= h($s['alias']) ?> · <?= h($s['cohort']) ?> · <?= h($s['acc']) ?>% · <?= $s['rt_sec'] ?>s"></div>
+          <?php endforeach; ?>
+          <div class="scatter-axis" style="bottom:4px;left:50%">← faster &nbsp; sec/trial &nbsp; slower →</div>
+          <div class="scatter-axis" style="left:4px;top:50%;transform:rotate(-90deg) translateX(50%);transform-origin:left">↑ accurate</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:6px;text-align:center">Investigation 2</div>
+        <div class="scatter" style="height:240px">
+          <?php foreach ($scatterR2 as $s): ?>
+            <?php $x = min(96, max(2, round(100*(float)$s['rt_sec']/$scatterMaxRtR2)));
+                  $y = min(95, max(2, 100-(int)$s['acc']));
+                  $color = $cohortColors[$s['cohort']] ?? '#7a6ba3'; ?>
+            <div class="scatter-dot" style="left:<?= $x ?>%;bottom:<?= 100-$y ?>%;background:<?= $color ?>"
+                 title="<?= h($s['alias']) ?> · <?= h($s['cohort']) ?> · <?= h($s['acc']) ?>% · <?= $s['rt_sec'] ?>s"></div>
+          <?php endforeach; ?>
+          <div class="scatter-axis" style="bottom:4px;left:50%">← faster &nbsp; sec/trial &nbsp; slower →</div>
+          <div class="scatter-axis" style="left:4px;top:50%;transform:rotate(-90deg) translateX(50%);transform-origin:left">↑ accurate</div>
+        </div>
+      </div>
     </div>
     <div class="gbar-legend">
       <?php foreach ($cohortColors as $c=>$col): if ($c==='other') continue; ?>
@@ -445,23 +470,19 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
     <?php if ($maxCount <= 1 && array_sum(array_map('array_sum',$accBins)) < 2): ?>
       <?= emptyState() ?>
     <?php else: ?>
-    <div style="display:flex;gap:16px;align-items:flex-end;height:100px;padding:0 10px">
-      <?php foreach ($binLabels as $bin): ?>
-      <div style="flex:1;text-align:center">
-        <div class="gbar-group">
-          <?php foreach ($genColors as $g=>$col): ?>
-          <div class="gbar" style="height:<?= max(2,round(70*($accBins[$g][$bin]??0)/$maxCount)) ?>px;background:<?= $col ?>">
-            <span><?= $accBins[$g][$bin] ?? 0 ?></span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+      <?php foreach ($genColors as $g=>$col): ?>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:<?= $col ?>;margin-bottom:6px;text-align:center"><?= ucfirst($g) ?></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;height:70px;justify-content:center">
+          <?php foreach ($binLabels as $bin): ?>
+          <div style="text-align:center">
+            <div style="width:32px;background:<?= $col ?>;border-radius:4px 4px 0 0;margin:0 auto;min-height:2px;height:<?= max(2,round(60*($accBins[$g][$bin]??0)/$maxCount)) ?>px;opacity:<?= ($accBins[$g][$bin]??0) > 0 ? 0.85 : 0.15 ?>"></div>
+            <div style="font-size:.62rem;color:var(--muted);margin-top:3px"><?= $bin ?><br><b><?= $accBins[$g][$bin] ?? 0 ?></b></div>
           </div>
           <?php endforeach; ?>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:4px"><?= $bin ?>%</div>
       </div>
-      <?php endforeach; ?>
-    </div>
-    <div class="gbar-legend">
-      <?php foreach ($genColors as $g=>$col): ?>
-        <span><span class="lg-dot" style="background:<?= $col ?>"></span><?= ucfirst($g) ?></span>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
