@@ -24,18 +24,22 @@ function cfg(): array {
 
 function db_research(): PDO {
     $c = cfg()['research'];
-    return new PDO($c['dsn'], $c['user'], $c['pass'], [
+    $pdo = new PDO($c['dsn'], $c['user'], $c['pass'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
+    $pdo->exec("SET time_zone = '+07:00'");
+    return $pdo;
 }
 
 function db_prize(): PDO {
     $c = cfg()['prize'];
-    return new PDO($c['dsn'], $c['user'], $c['pass'], [
+    $pdo = new PDO($c['dsn'], $c['user'], $c['pass'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
+    $pdo->exec("SET time_zone = '+07:00'");
+    return $pdo;
 }
 
 function json_out(array $payload, int $code = 200): never {

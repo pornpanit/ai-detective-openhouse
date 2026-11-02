@@ -156,14 +156,18 @@
   }
 
   /* ═══════════════════ VISUAL STAMP ( Investigation 1: glow effect, Investigation 2: text stamp ) ═══════════════════ */
-  /* Investigation 1 + practice pair: subtle scale-up on selected face (no layout shift) */
+  /* Investigation 1 + practice pair: noticeable scale-up + gold border on selected face */
   function faceFlash(btnEl) {
     if (!btnEl) return;
-    btnEl.style.transition = "transform .2s ease";
-    btnEl.style.transform = "scale(1.04)";
+    btnEl.style.transition = "transform .25s ease, border-color .25s ease, box-shadow .25s ease";
+    btnEl.style.transform = "scale(1.08)";
+    btnEl.style.borderColor = "#f5a623";
+    btnEl.style.boxShadow = "0 0 24px rgba(245,166,35,.5)";
     setTimeout(() => {
       btnEl.style.transform = "scale(1)";
-    }, 350);
+      btnEl.style.borderColor = "";
+      btnEl.style.boxShadow = "";
+    }, 500);
   }
 
   /* Investigation 2: text stamp (player's explicit choice — safe) */
@@ -928,8 +932,18 @@
         button_label: () => T("prize_join"),
         html: () => `<div class="card"><h2>${T("prize_h")}</h2>
           <p class="hint">${fmt(T("prize_alias_note"), { a: S.alias })}</p>
-          <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p></div>`,
+          <p><label>${T("prize_contact")}<br><input type="text" name="contact" required maxlength="250"></label></p>
+          <div style="text-align:center;margin-top:10px">
+            <button class="jspsych-btn jspsych-btn--secondary" id="prize-back" type="button">← ${T("prize_skip")}</button>
+          </div></div>`,
+        on_load: () => {
+          document.getElementById("prize-back").onclick = () => {
+            S.prizeJoin = false;
+            S.jp?.finishTrial();
+          };
+        },
         on_finish: async (d) => {
+          if (!S.prizeJoin) return;
           try { await postJSON(`${API}/contact.php`, { alias: S.alias, contact: (d.response.contact || "").trim() }); } catch {}
         },
       }],
@@ -949,7 +963,11 @@
         <div class="card-actions">
           <button class="jspsych-btn" id="card-save" style="display:none">${T("card_save")}</button>
           <button class="jspsych-btn jspsych-btn--secondary" id="card-share" style="display:none">${T("card_share")}</button>
-        </div></div>`,
+        </div>
+        <p style="margin-top:18px;font-size:1.15rem">
+          <a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
+          <a class="plain" href="live.html">📺 LIVE</a>
+        </p></div>`,
       choices: [() => T("continue")],
       on_load: async () => {
         scrollTop();
@@ -975,17 +993,6 @@
         await flushOutbox();
         clearCtx();
       },
-    });
-
-    // ── debrief ──
-    timeline.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: () => `<div class="card"><h2>${T("debrief_h")}</h2><p>${T("debrief_1")}</p><p>${T("debrief_2")}</p>
-        <p>${T("debrief_3")}</p>
-        <p><a class="plain" href="leaderboard.html?lang=${S.lang}">${T("see_board")}</a> ·
-           <a class="plain" href="live.html">LIVE</a></p></div>`,
-      choices: [() => T("done_btn")],
-      on_load: scrollTop,
     });
 
     jsPsych.run(timeline).then(() => hideQuit());

@@ -176,7 +176,10 @@ for ($q = 1; $q <= 8; $q++) {
 $recent = $one("SELECT s.session_id, s.lang, s.cohort, s.alias, s.consent, s.completed, s.is_test,
     s.created_at, s.finished_at,
     ROUND(COALESCE(TIMESTAMPDIFF(SECOND, s.created_at, s.finished_at), 0) / 60, 1) as play_min,
-    COUNT(t.id) trials, COALESCE(SUM(t.correct),0) correct
+    COUNT(t.id) trials, COALESCE(SUM(t.correct),0) correct,
+    ROUND(100*COALESCE(SUM(t.correct),0)/NULLIF(COUNT(t.id),0),1) acc_total,
+    ROUND(100*SUM(CASE WHEN t.round='1' THEN t.correct END)/NULLIF(COUNT(CASE WHEN t.round='1' THEN 1 END),0),1) acc_r1,
+    ROUND(100*SUM(CASE WHEN t.round='2' THEN t.correct END)/NULLIF(COUNT(CASE WHEN t.round='2' THEN 1 END),0),1) acc_r2
     FROM sessions s LEFT JOIN trials t ON t.session_id=s.session_id AND t.round IN ('1','2')
     GROUP BY s.session_id ORDER BY s.created_at DESC LIMIT 20");
 
@@ -342,7 +345,7 @@ footer{margin-top:34px;color:var(--muted);font-size:.75rem;text-align:center}
   <div class="card"><h3>Participant gender</h3><?= pie(array_map(fn($r)=>[$r['g'],$r['n']],$byGender)) ?></div>
   <div class="card"><h3>Language</h3><?= pie(array_map(fn($r)=>[$r['lang'],$r['n']],$byLang)) ?></div>
   <div class="card"><h3>Joins by hour</h3><?= bars(array_map(fn($r)=>[str_pad((string)$r['h'],2,"0",STR_PAD_LEFT).":00",$r['n']],$byHour)) ?></div>
-  <div class="card"><h3>Conversion funnel</h3><?= bars($funnel) ?><div class="note">started → completed → consented → board</div></div>
+  
   <div class="card"><h3>Where players quit</h3><?= bars(array_map(fn($k,$v)=>[$k,$v],array_keys($quitBuckets),$quitBuckets)) ?></div>
 </div>
 
@@ -353,8 +356,8 @@ footer{margin-top:34px;color:var(--muted);font-size:.75rem;text-align:center}
 are implicit (100% − spotted%). No "real accuracy" exists in this round by design.</div>
 <div class="grid">
   <div class="card"><h3>AI faces spotted by type (%)</h3>
-    <?= bars(array_map(fn($r)=>["{$r['image_type']} (n={$r['n']})",$r['pct']],$r1Spotted),'%') ?>
-    <div class="note">gan = StyleGAN2 · diffusion = Stable Diffusion 1.5</div></div>
+    <?= bars(array_map(fn($r)=>["{$r['ai_type']} (n={$r['n']})",$r['pct']],$r1Spotted),'%') ?>
+    <div class="note">gan = StyleGAN2 · diffusion = Stable Diffusion 1.5 · RT = how fast the player decided (lower = faster judgment)</div></div>
   <div class="card"><h3>Accuracy by cohort (%)</h3>
     <?= bars(array_map(fn($r)=>["{$r['cohort']} (n={$r['n']})",$r['pct']],$r1AccByCohort),'%') ?></div>
   <?php if ($r1RtHist): $r=$r1RtHist[0]; ?>
@@ -378,7 +381,7 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
     <?= bars(array_map(fn($r)=>["{$r['cohort']} (n={$r['n']})",$r['pct']],$r2AccByCohort),'%') ?></div>
   <div class="card"><h3>Response bias — % labeled AI</h3>
     <?= bars(array_map(fn($r)=>["{$r['cohort']} (n={$r['n']})",$r['pct_ai']],$bias),'%') ?>
-    <div class="note">50% = perfectly unbiased</div></div>
+    <div class="note">50% = perfectly unbiased · >50% = biased toward saying 'AI' (calls everything fake) · <50% = biased toward saying 'Real' (trusts everything)</div></div>
   <?php if ($r2RtHist): $r=$r2RtHist[0]; ?>
   <div class="card"><h3>RT distribution (ms)</h3>
     <?php $rtRows2=[['<1s',$r['b1']],['1–2s',$r['b2']],['2–3s',$r['b3']],['3–5s',$r['b4']],['5–8s',$r['b5']],['8s+',$r['b6']]];
@@ -402,6 +405,16 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
     <div class="cm-label">Real face<br><small>(truth)</small></div>
     <div class="cm-cell cm-bad"><b><?= round(100*(int)$cm['fp']/$cmTotal) ?>%</b><span>False alarm ✗ (FP)<br><?= (int)$cm['fp'] ?> trials</span></div>
     <div class="cm-cell cm-good"><b><?= round(100*(int)$cm['tn']/$cmTotal) ?>%</b><span>Correct reject ✓ (TN)<br><?= (int)$cm['tn'] ?> trials</span></div>
+  </div>
+  <?php
+  $precision = ($cm['tp'] + $cm['fp']) > 0 ? round(100*(int)$cm['tp']/((int)$cm['tp']+(int)$cm['fp']),1) : 0;
+  $recall = ($cm['tp'] + $cm['fn']) > 0 ? round(100*(int)$cm['tp']/((int)$cm['tp']+(int)$cm['fn']),1) : 0;
+  $f1 = ($precision + $recall) > 0 ? round(2*$precision*$recall/($precision+$recall),1) : 0;
+  ?>
+  <div style="display:flex;gap:20px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+    <div style="text-align:center"><b style="font-size:1.4rem;color:var(--accent)"><?= $precision ?>%</b><br><small style="color:var(--muted)">Precision<br>TP/(TP+FP)</small></div>
+    <div style="text-align:center"><b style="font-size:1.4rem;color:var(--accent)"><?= $recall ?>%</b><br><small style="color:var(--muted)">Recall (Hit Rate)<br>TP/(TP+FN)</small></div>
+    <div style="text-align:center"><b style="font-size:1.4rem;color:var(--accent)"><?= $f1 ?>%</b><br><small style="color:var(--muted)">F1 Score<br>2·P·R/(P+R)</small></div>
   </div>
 </div>
 
@@ -489,12 +502,31 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
   <?php endforeach; ?>
 </div>
 
+<!-- ═══ SURVEY × ACCURACY ═══ -->
+<h2 class="sec">Survey × Accuracy <span class="tag">(avg accuracy per answer)</span></h2>
+<div class="grid">
+<?php foreach ($surveyQs as $qNum=>$qInfo): ?>
+  <?php
+  $corr = $one("SELECT s.familiarity_$q as val, ROUND(100*AVG(t.correct),1) acc, COUNT(DISTINCT s.session_id) n
+      FROM sessions s JOIN trials t ON t.session_id=s.session_id AND t.round IN ('1','2')
+      WHERE s.consent=1 AND s.is_test=0 AND s.familiarity_$q IS NOT NULL
+      GROUP BY s.familiarity_$q ORDER BY s.familiarity_$q");
+  ?>
+  <?php if ($corr): ?>
+  <div class="card">
+    <h4>Q<?= $qNum ?>. <?= h($qInfo['label']) ?></h4>
+    <?= bars(array_map(fn($r)=>[$qInfo['options'][(int)$r['val']]." ({$r['n']})",$r['acc']], $corr), '%') ?>
+  </div>
+  <?php endif; ?>
+<?php endforeach; ?>
+</div>
+
 <!-- ═══ SESSIONS ═══ -->
 <h2 class="sec">Sessions <span class="tag">(newest 20 · 🧪 = hidden from public)</span></h2>
 <div class="card">
 <?php if (!$recent): ?><?= emptyState() ?><?php else: ?>
 <div class="tbl-wrap"><table>
-<thead><tr><th>session</th><th>lang</th><th>codename</th><th>cohort</th><th>trials</th><th>correct</th><th>consent</th><th>done</th><th>test</th><th>time</th><th>created</th></tr></thead>
+<thead><tr><th>session</th><th>lang</th><th>codename</th><th>cohort</th><th>trials</th><th>correct</th><th>total</th><th>R1</th><th>R2</th><th>consent</th><th>done</th><th>test</th><th>time</th><th>created</th></tr></thead>
 <tbody>
 <?php foreach ($recent as $r): ?>
 <tr>
@@ -504,6 +536,9 @@ are implicit (100% − spotted%). No "real accuracy" exists in this round by des
   <td><?= h($r['cohort']) ?></td>
   <td><?= h($r['trials']) ?></td>
   <td><?= h($r['correct']) ?></td>
+  <td><b><?= h($r['acc_total'] ?? '—') ?>%</b></td>
+  <td><?= h($r['acc_r1'] ?? '—') ?>%</td>
+  <td><?= h($r['acc_r2'] ?? '—') ?>%</td>
   <td><?php if ($r['consent']==='1') echo '<span class="badge cons">yes</span>';
            elseif ($r['consent']==='0') echo '<span class="badge nocons">no</span>';
            else echo '—'; ?></td>
