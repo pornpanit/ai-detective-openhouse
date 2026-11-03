@@ -4,6 +4,41 @@ Every change to the system, newest first. Dates are when the work was done.
 
 ---
 
+## 2026-11-03 — Session 17: Openhouse parallel web — full build & deploy plan documented
+
+### `docs/EVENT_PARALLEL_WEB_PLAN.md` (new — planning only, no code yet)
+- **Purpose**: a self-contained runbook executed on the **lab server PC** by an AI
+  agent: builds a parallel instance of the game for the openhouse (200++ concurrent
+  players via QR) without touching `public/`, MariaDB, or Azure.
+- **Architecture decided**: Cloudflare Tunnel primary (own domain, edge-cached
+  8,100 face images, no free-tier caps — ngrok free rejected as primary:
+  40 conn/min + 1 GB/month + warning page) + ngrok static domain as backup door
+  into the SAME local site (same DB, same one-play lock). Azure site = last-resort
+  fallback QR.
+- **Database decided**: parallel instance uses **SQLite** (`event.sqlite` +
+  isolated `event_prize.sqlite`), not MariaDB — no server process, no connection
+  limit; write load trivial (~40 INSERTs/sec worst case); one-file backup.
+- **Schema changes (SQLite version only)**: ENUM→CHECK; new `model` column on
+  images+trials (`sg1/sg2/sg3/sd15/sd21/sd3/sdxl/flux/ffhq`) to capture the new
+  8-model dataset; new `viewport_start`/`viewport_end` (dynamic screen capture at
+  signup + finish/quit, with devicePixelRatio); new `idx_image` on trials.
+- **New dataset pipeline**: 8,100 faces ×3 multiplier (Real=FFHQ 900; GAN=SG1/2/3
+  ≈300 ea; Diffusion=SD1.5/2.1/3/XL/FLUX ≈180 ea) from the local 260K source,
+  fixed seed, manifest with `model` committed to git (pixels gitignored).
+- **Dynamic screen**: records live viewport at session start AND end (rotation
+  detection) + DPR, in addition to existing static `screen`.
+- **API port spec**: 14 mechanical MySQL→SQLite fixes listed file-by-file;
+  `generate_plan()` reworked to stratified sampling across all 9 model cells.
+- **Ops hardening**: `PHP_CLI_SERVER_WORKERS=32` (php -S is single-threaded by
+  default), router.php cache headers for edge caching, cache pre-warm script,
+  11-point verification incl. ~100-concurrent load test.
+- **Analysis approach**: event.sqlite = the event dataset; test data preserved,
+  excluded at analysis by `created_at >= <EVENT_DATE>` (never deleted).
+- **No files modified**: plan document + CHANGELOG/README pointers only; CI
+  untouched (doc-only push does not trigger deploy).
+
+---
+
 ## 2026-11-01 — Session 16: GitHub → Azure CI/CD pipeline
 
 ### Auto-deploy from GitHub push to Azure
